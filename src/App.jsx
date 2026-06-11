@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Shield, Building2, LogOut, ArrowLeft, Info, BarChart2, Users, Clipboard, FileText, UserCheck, Activity, History, Loader } from "lucide-react";
+import { Building2, LogOut, ArrowLeft, Info, BarChart2, Users, Clipboard, FileText, UserCheck, Activity, History, Shield, Loader } from "lucide-react";
+import { NexusLogo } from "./assets/NexusLogo";
 import { AppProvider, useApp } from "./context/AppContext";
 import LoginScreen from "./pages/LoginScreen";
 import EmpresaSelector from "./pages/EmpresaSelector";
@@ -60,11 +61,14 @@ function AppContent() {
     <div style={{ fontFamily:"system-ui,sans-serif", background:C.bg, minHeight:"100vh", color:C.text }}>
 
       {/* Header */}
-      <div style={{ background:C.navy, padding:"10px 20px", display:"flex", alignItems:"center", gap:12 }}>
-        <Shield size={20} color="#93c5fd" />
+      <div style={{ background:`linear-gradient(90deg, #0d2a5e 0%, #1652a1 100%)`, padding:"8px 20px", display:"flex", alignItems:"center", gap:12 }}>
+        <NexusLogo size={36} />
         <div style={{ flex:1 }}>
-          <p style={{ color:"#fff", fontWeight:600, fontSize:14, margin:0 }}>GRO/PGR — Riscos Psicossociais</p>
-          <p style={{ color:"#93c5fd", fontSize:10, margin:0 }}>NR-01 | NR-17 | ISO 45003 | eSocial | FAP/NTEP</p>
+          <p style={{ color:"#fff", fontWeight:800, fontSize:15, margin:0, letterSpacing:"-0.3px" }}>
+            NEX<span style={{ color:"#38b249" }}>US</span>
+            <span style={{ fontWeight:400, fontSize:11, color:"rgba(255,255,255,0.6)", marginLeft:10 }}>Gestão de Riscos Psicossociais</span>
+          </p>
+          <p style={{ color:"rgba(255,255,255,0.5)", fontSize:9.5, margin:0 }}>NR-01 · NR-17 · ISO 45003 · eSocial · FAP/NTEP · Technogov Soluções</p>
         </div>
 
         {/* Empresa ativa + troca */}

@@ -42,13 +42,13 @@ export const FREQ_VAL = { "Nunca":0,"Raramente":1,"Às vezes":2,"Frequentemente"
 export const SEV_VAL  = { "Insignificante":0,"Menor":1,"Moderado":2,"Crítico":3,"Catastrófico":4 };
 
 export const C = {
-  navy:"#1e3a5f", navyMid:"#2d5382", blue:"#4a90d9", gray:"#64748b",
+  navy:"#0d2a5e", navyMid:"#1652a1", blue:"#4a90d9", gray:"#64748b",
   border:"#e2e8f0", white:"#ffffff", bg:"#f8fafc",
-  red:"#dc2626", amber:"#d97706", green:"#16a34a",
+  red:"#dc2626", amber:"#d97706", green:"#38b249",
   text:"#0f172a", muted:"#64748b",
 };
 
-export const PIE_COLORS = ["#2d5382","#4a90d9","#d97706","#dc2626","#7c3aed","#0f766e","#b45309"];
+export const PIE_COLORS = ["#1652a1","#38b249","#d97706","#dc2626","#7c3aed","#0f766e","#b45309"];
 
 export const EMP_FORM_VAZIO = { razao:"", cnpj:"", cnae:"", endereco:"", responsavel:"", dataAvaliacao:"", grauRisco:"3" };
 
