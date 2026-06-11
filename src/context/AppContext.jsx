@@ -1,12 +1,14 @@
 import { createContext, useContext, useState, useEffect, useMemo } from "react";
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "firebase/auth";
+import { initializeApp, deleteApp, getApps } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import {
   doc, getDoc, setDoc, collection,
   addDoc, updateDoc, deleteDoc, onSnapshot,
   query, where, documentId, arrayUnion,
   serverTimestamp, orderBy,
 } from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { auth, db, firebaseConfig } from "../firebase";
 import { FATORES, EMP_FORM_VAZIO } from "../constants";
 import { getRiskScore, getRiskLabel } from "../utils";
 
@@ -271,6 +273,37 @@ export function AppProvider({ children }) {
     await updateDoc(doc(db, "usuarios", id), data);
   };
 
+  const criarUsuario = async ({ email, senha, nome, perfil, empresasIds }) => {
+    const appName = `secondary-${Date.now()}`;
+    const secondaryApp = initializeApp(firebaseConfig, appName);
+    const secondaryAuth = getAuth(secondaryApp);
+    try {
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, email, senha);
+      const uid = cred.user.uid;
+      const perfil_ = perfil || "Gestor";
+      await setDoc(doc(db, "usuarios", uid), {
+        nome: nome || email,
+        email,
+        perfil: perfil_,
+        empresas: empresasIds || [],
+      });
+      return { ok: true };
+    } catch (e) {
+      const msg = e.code === "auth/email-already-in-use"
+        ? "E-mail já cadastrado."
+        : e.code === "auth/weak-password"
+        ? "Senha deve ter no mínimo 6 caracteres."
+        : "Erro ao criar usuário.";
+      return { ok: false, msg };
+    } finally {
+      await deleteApp(secondaryApp);
+    }
+  };
+
+  const excluirUsuario = async (uid) => {
+    await deleteDoc(doc(db, "usuarios", uid));
+  };
+
   // ── Riscos computados ──
   const riscos = useMemo(() => {
     const r = [];
@@ -308,7 +341,7 @@ export function AppProvider({ children }) {
     // Checklist
     checklist, savingCheck, setCheckField,
     // Usuários
-    usuarios, salvarUsuario,
+    usuarios, salvarUsuario, criarUsuario, excluirUsuario,
     // Computed
     riscos,
     // Indicadores
