@@ -16,8 +16,16 @@ import {
   Shield, AlertTriangle, FileText, BarChart2, Clipboard, Users,
   LogOut, Plus, Trash2, Edit2, Save, X, AlertCircle, Info,
   Printer, Activity, TrendingUp, Clock, CheckSquare,
-  Building2, Eye, EyeOff, Loader, ArrowLeft,
+  Building2, Eye, EyeOff, Loader, ArrowLeft, UserCheck, Lock,
 } from "lucide-react";
+
+const PERFIS = ["Admin", "SESMT", "Gestor"];
+const PERFIL_CORES = {
+  Admin:   { color:"#991b1b", bg:"#fee2e2" },
+  SESMT:   { color:"#1e40af", bg:"#dbeafe" },
+  Gestor:  { color:"#166534", bg:"#dcfce7" },
+  Usuário: { color:"#64748b", bg:"#f1f5f9" },
+};
 
 // ─── FATORES PSICOSSOCIAIS ────────────────────────────────────
 const FATORES = [
@@ -183,6 +191,11 @@ export default function App() {
   const [catFiltro, setCatFiltro]   = useState("Todas");
   const [savingCheck, setSavingCheck] = useState(false);
 
+  // Usuários (Admin only)
+  const [usuarios, setUsuarios]         = useState([]);
+  const [editUsuario, setEditUsuario]   = useState(null);
+  const [savingUsuario, setSavingUsuario] = useState(false);
+
   const [aba, setAba] = useState(0);
 
   // ── Auth listener ──
@@ -194,7 +207,7 @@ export default function App() {
         if (snap.exists()) {
           setUserProfile(snap.data());
         } else {
-          const defaultProfile = { nome: u.email, perfil: "Usuário", empresas: [] };
+          const defaultProfile = { nome: u.email, email: u.email, perfil: "Gestor", empresas: [] };
           await setDoc(doc(db, "usuarios", u.uid), defaultProfile);
           setUserProfile(defaultProfile);
         }
@@ -266,6 +279,15 @@ export default function App() {
     );
     return unsub;
   }, [user, empresaAtiva]);
+
+  // ── Carregar usuários (Admin only) ──
+  useEffect(() => {
+    if (!user || userProfile?.perfil !== "Admin") { setUsuarios([]); return; }
+    const unsub = onSnapshot(collection(db, "usuarios"), snap => {
+      setUsuarios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, [user, userProfile?.perfil]);
 
   // ── Auth ──
   const login = async () => {
@@ -367,6 +389,16 @@ export default function App() {
     salvarItemChecklist(key, updated);
   };
 
+  // ── Usuários ──
+  const salvarUsuario = async () => {
+    if (!editUsuario) return;
+    setSavingUsuario(true);
+    const { id, ...data } = editUsuario;
+    await updateDoc(doc(db, "usuarios", id), data);
+    setEditUsuario(null);
+    setSavingUsuario(false);
+  };
+
   // ── Riscos computados ──
   const riscos = useMemo(() => {
     const r = [];
@@ -399,6 +431,10 @@ export default function App() {
 
   const kpiCriticos = riscos.filter(r => r.score >= 13).length;
   const kpiAssedio  = riscos.filter(r => r.cat === "Suporte Social e Relações" && r.score >= 8).length;
+
+  // ── Permissões ──
+  const isAdmin = userProfile?.perfil === "Admin";
+  const canEdit = isAdmin || userProfile?.perfil === "SESMT";
 
   // ── Loading ──
   if (loading) return (
@@ -470,7 +506,7 @@ export default function App() {
             <p style={{fontSize:20,fontWeight:700,color:C.navy,margin:"0 0 4px"}}>Selecionar Empresa</p>
             <p style={{fontSize:13,color:C.muted,margin:0}}>Olá, <strong>{userProfile?.nome}</strong> — escolha a empresa para continuar ou cadastre uma nova.</p>
           </div>
-          <Btn onClick={()=>setCriandoEmpresa(p=>!p)} color={C.navyMid} icon={<Plus size={13}/>}>Nova Empresa</Btn>
+          {canEdit && <Btn onClick={()=>setCriandoEmpresa(p=>!p)} color={C.navyMid} icon={<Plus size={13}/>}>Nova Empresa</Btn>}
         </div>
 
         {/* Formulário Nova Empresa */}
@@ -544,6 +580,7 @@ export default function App() {
     {label:"Levantamento",icon:<Clipboard size={14}/>},
     {label:"Matriz",      icon:<Shield size={14}/>},
     {label:"Plano de Ação",icon:<FileText size={14}/>},
+    ...(isAdmin ? [{label:"Usuários", icon:<UserCheck size={14}/>}] : []),
   ];
 
   return (
@@ -671,7 +708,7 @@ export default function App() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <SectionTitle><Building2 size={14}/> Dados da Empresa Avaliada</SectionTitle>
               {!editEmp
-                ? <Btn onClick={()=>{setEmpForm({razao:empresaAtiva.razao||"",cnpj:empresaAtiva.cnpj||"",cnae:empresaAtiva.cnae||"",endereco:empresaAtiva.endereco||"",responsavel:empresaAtiva.responsavel||"",dataAvaliacao:empresaAtiva.dataAvaliacao||"",grauRisco:empresaAtiva.grauRisco||"3"});setEditEmp(true);}} outline color={C.navyMid} small icon={<Edit2 size={12}/>}>Editar</Btn>
+                ? canEdit && <Btn onClick={()=>{setEmpForm({razao:empresaAtiva.razao||"",cnpj:empresaAtiva.cnpj||"",cnae:empresaAtiva.cnae||"",endereco:empresaAtiva.endereco||"",responsavel:empresaAtiva.responsavel||"",dataAvaliacao:empresaAtiva.dataAvaliacao||"",grauRisco:empresaAtiva.grauRisco||"3"});setEditEmp(true);}} outline color={C.navyMid} small icon={<Edit2 size={12}/>}>Editar</Btn>
                 : <div style={{display:"flex",gap:8}}>
                     <Btn onClick={salvarEmpresa} color={C.green} small disabled={savingEmp} icon={<Save size={12}/>}>{savingEmp?"Salvando...":"Salvar"}</Btn>
                     <Btn onClick={()=>setEditEmp(false)} outline color={C.gray} small icon={<X size={12}/>}>Cancelar</Btn>
@@ -704,7 +741,7 @@ export default function App() {
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
               <SectionTitle><Users size={14}/> Setores Cadastrados ({setores.length})</SectionTitle>
-              <Btn onClick={()=>setAddingSetor(true)} color={C.navyMid} small icon={<Plus size={12}/>}>Novo Setor</Btn>
+              {canEdit && <Btn onClick={()=>setAddingSetor(true)} color={C.navyMid} small icon={<Plus size={12}/>}>Novo Setor</Btn>}
             </div>
 
             {addingSetor && (
@@ -762,10 +799,10 @@ export default function App() {
                         <p style={{fontWeight:600,fontSize:14,margin:"0 0 2px",color:C.navy}}>{s.nome}</p>
                         <p style={{fontSize:11,color:C.muted,margin:0}}>Responsável: {s.responsavel||"—"} | {s.nFunc||0} funcionários</p>
                       </div>
-                      <div style={{display:"flex",gap:6}}>
+                      {canEdit && <div style={{display:"flex",gap:6}}>
                         <button onClick={()=>setEditSetor({...s})} style={{background:"none",border:"none",cursor:"pointer",color:C.blue}}><Edit2 size={13}/></button>
                         <button onClick={()=>excluirSetor(s.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.red}}><Trash2 size={13}/></button>
-                      </div>
+                      </div>}
                     </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
                       {(s.servidores||[]).length===0
@@ -845,7 +882,8 @@ export default function App() {
                           <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                             {FREQ_OPT.map(o=>{
                               const sel=val.freq===o;
-                              return <button key={o} disabled={!setorSel} onClick={()=>setCheckField(item.id,setorSel,"freq",o)} style={{fontSize:10,padding:"3px 9px",borderRadius:20,border:`1px solid ${sel?C.navyMid:C.border}`,background:sel?C.navyMid:C.white,color:sel?C.white:C.gray,cursor:setorSel?"pointer":"not-allowed",fontWeight:sel?600:400,fontFamily:"inherit"}}>{o}</button>;
+                              const dis=!setorSel||!canEdit;
+                              return <button key={o} disabled={dis} onClick={()=>setCheckField(item.id,setorSel,"freq",o)} style={{fontSize:10,padding:"3px 9px",borderRadius:20,border:`1px solid ${sel?C.navyMid:C.border}`,background:sel?C.navyMid:C.white,color:sel?C.white:C.gray,cursor:dis?"not-allowed":"pointer",fontWeight:sel?600:400,fontFamily:"inherit"}}>{o}</button>;
                             })}
                           </div>
                         </div>
@@ -855,7 +893,8 @@ export default function App() {
                             {SEV_OPT.map((o,oi)=>{
                               const sevColors=["#16a34a","#65a30d","#d97706","#ea580c","#dc2626"];
                               const sel=val.sev===o;
-                              return <button key={o} disabled={!setorSel} onClick={()=>setCheckField(item.id,setorSel,"sev",o)} style={{fontSize:10,padding:"3px 9px",borderRadius:20,border:`1px solid ${sel?sevColors[oi]:C.border}`,background:sel?sevColors[oi]:C.white,color:sel?C.white:C.gray,cursor:setorSel?"pointer":"not-allowed",fontWeight:sel?600:400,fontFamily:"inherit"}}>{o}</button>;
+                              const dis=!setorSel||!canEdit;
+                              return <button key={o} disabled={dis} onClick={()=>setCheckField(item.id,setorSel,"sev",o)} style={{fontSize:10,padding:"3px 9px",borderRadius:20,border:`1px solid ${sel?sevColors[oi]:C.border}`,background:sel?sevColors[oi]:C.white,color:sel?C.white:C.gray,cursor:dis?"pointer":"not-allowed",fontWeight:sel?600:400,fontFamily:"inherit"}}>{o}</button>;
                             })}
                           </div>
                         </div>
@@ -997,6 +1036,103 @@ export default function App() {
                 </Card>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ═══ ABA 6: USUÁRIOS (Admin only) ═══ */}
+        {aba===6 && isAdmin && (
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <SectionTitle><UserCheck size={14}/> Gerenciamento de Usuários ({usuarios.length})</SectionTitle>
+              <div style={{display:"flex",alignItems:"center",gap:6,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:6,padding:"5px 10px"}}>
+                <Lock size={11} color="#1e40af"/>
+                <span style={{fontSize:11,color:"#1e40af"}}>Visível apenas para Admin</span>
+              </div>
+            </div>
+
+            <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:11,color:"#92400e"}}>
+              Usuários são criados no <strong>Firebase Authentication</strong>. Aqui você define o perfil de acesso e associa cada usuário às empresas que ele pode visualizar.
+            </div>
+
+            {usuarios.length === 0 ? (
+              <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"24px",textAlign:"center",color:C.muted,fontSize:12}}>
+                Nenhum usuário encontrado.
+              </div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {usuarios.map(u => {
+                  const pc = PERFIL_CORES[u.perfil] || PERFIL_CORES["Usuário"];
+                  const isEditing = editUsuario?.id === u.id;
+                  return (
+                    <Card key={u.id} style={isEditing?{border:`1px solid ${C.navyMid}`}:{}}>
+                      {!isEditing ? (
+                        <div style={{display:"flex",alignItems:"center",gap:12}}>
+                          <div style={{width:36,height:36,borderRadius:"50%",background:"#e0e7ff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#3730a3",flexShrink:0}}>
+                            {(u.nome||u.email||"?").split(" ").map(p=>p[0]).slice(0,2).join("").toUpperCase()}
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                              <p style={{fontWeight:600,fontSize:13,margin:0,color:C.navy,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.nome||"—"}</p>
+                              <Badge label={u.perfil||"Usuário"} color={pc.color} bg={pc.bg}/>
+                            </div>
+                            <p style={{fontSize:11,color:C.muted,margin:"0 0 5px"}}>{u.email||u.id}</p>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                              {(u.empresas||[]).length === 0
+                                ? <span style={{fontSize:10,color:C.muted}}>Sem empresas associadas</span>
+                                : (u.empresas||[]).map(eid => {
+                                    const emp = empresas.find(e=>e.id===eid);
+                                    return emp ? <span key={eid} style={{background:"#f0f9ff",color:"#0369a1",fontSize:10,padding:"2px 8px",borderRadius:4}}>{emp.razao}</span> : null;
+                                  })
+                              }
+                            </div>
+                          </div>
+                          <Btn onClick={()=>setEditUsuario({...u})} outline color={C.navyMid} small icon={<Edit2 size={11}/>}>Editar</Btn>
+                        </div>
+                      ) : (
+                        <div>
+                          <p style={{fontWeight:600,fontSize:13,color:C.navy,margin:"0 0 14px"}}>Editando: {editUsuario.nome||editUsuario.email}</p>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+                            <Input label="Nome" value={editUsuario.nome||""} onChange={v=>setEditUsuario(p=>({...p,nome:v}))}/>
+                            <div>
+                              <p style={{fontSize:11,color:C.muted,margin:"0 0 4px",fontWeight:500}}>Perfil de Acesso</p>
+                              <select value={editUsuario.perfil||"Gestor"} onChange={e=>setEditUsuario(p=>({...p,perfil:e.target.value}))}
+                                style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,fontFamily:"inherit",color:C.text,background:C.white}}>
+                                {PERFIS.map(p=><option key={p} value={p}>{p}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                          <div style={{marginBottom:14}}>
+                            <p style={{fontSize:11,color:C.muted,margin:"0 0 8px",fontWeight:500}}>Empresas com acesso</p>
+                            {empresas.length === 0
+                              ? <p style={{fontSize:11,color:C.muted}}>Nenhuma empresa cadastrada.</p>
+                              : <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                                  {empresas.map(emp => {
+                                    const marcada = (editUsuario.empresas||[]).includes(emp.id);
+                                    return (
+                                      <label key={emp.id} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",padding:"5px 10px",borderRadius:6,border:`1px solid ${marcada?C.navyMid:C.border}`,background:marcada?"#eff6ff":C.white,fontSize:11,fontWeight:marcada?600:400,color:marcada?C.navyMid:C.text}}>
+                                        <input type="checkbox" checked={marcada}
+                                          onChange={e=>setEditUsuario(p=>({...p,empresas:e.target.checked?[...(p.empresas||[]),emp.id]:(p.empresas||[]).filter(id=>id!==emp.id)}))}
+                                          style={{accentColor:C.navyMid}}/>
+                                        {emp.razao}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                            }
+                          </div>
+                          <div style={{display:"flex",gap:8}}>
+                            <Btn onClick={salvarUsuario} color={C.green} small disabled={savingUsuario} icon={savingUsuario?<Loader size={11}/>:<Save size={11}/>}>
+                              {savingUsuario?"Salvando...":"Salvar"}
+                            </Btn>
+                            <Btn onClick={()=>setEditUsuario(null)} outline color={C.gray} small icon={<X size={11}/>}>Cancelar</Btn>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
