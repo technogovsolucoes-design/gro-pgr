@@ -126,10 +126,16 @@ function AppContent() {
 
 function LoadingScreen() {
   return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:C.bg }}>
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:`linear-gradient(135deg, #0d2a5e 0%, #1652a1 50%, #0d3d20 100%)`, flexDirection:"column", gap:16 }}>
+      <NexusLogo size={64} />
       <div style={{ textAlign:"center" }}>
-        <Loader size={32} color={C.navyMid} />
-        <p style={{ color:C.muted, marginTop:12, fontSize:13 }}>Carregando sistema...</p>
+        <p style={{ color:"#fff", fontWeight:800, fontSize:20, margin:"0 0 4px", letterSpacing:"-0.3px" }}>
+          NEX<span style={{ color:"#38b249" }}>US</span>
+        </p>
+        <div style={{ display:"flex", alignItems:"center", gap:8, justifyContent:"center" }}>
+          <Loader size={14} color="rgba(255,255,255,0.7)" />
+          <p style={{ color:"rgba(255,255,255,0.6)", fontSize:12, margin:0 }}>Carregando...</p>
+        </div>
       </div>
     </div>
   );

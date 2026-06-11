@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Building2, Plus, Save, X, Loader, LogOut, Shield } from "lucide-react";
+import { Building2, Plus, Save, X, Loader, LogOut } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { Btn, Input, Card, SectionTitle } from "../components/ui";
 import { C, EMP_FORM_VAZIO } from "../constants";
+import { NexusLogo } from "../assets/NexusLogo";
 
 export default function EmpresaSelector() {
   const { user, userProfile, logout, empresas, loadingEmpresas, selecionarEmpresa, criarEmpresa, canEdit } = useApp();
@@ -21,11 +22,14 @@ export default function EmpresaSelector() {
 
   return (
     <div style={{ fontFamily:"system-ui,sans-serif", background:C.bg, minHeight:"100vh", color:C.text }}>
-      <div style={{ background:C.navy, padding:"12px 20px", display:"flex", alignItems:"center", gap:12 }}>
-        <Shield size={20} color="#93c5fd" />
+      <div style={{ background:`linear-gradient(90deg, #0d2a5e 0%, #1652a1 100%)`, padding:"8px 20px", display:"flex", alignItems:"center", gap:12 }}>
+        <NexusLogo size={36} />
         <div style={{ flex:1 }}>
-          <p style={{ color:"#fff", fontWeight:600, fontSize:14, margin:0 }}>GRO/PGR — SST</p>
-          <p style={{ color:"#93c5fd", fontSize:10, margin:0 }}>Gestão de Riscos Psicossociais · NR-01</p>
+          <p style={{ color:"#fff", fontWeight:800, fontSize:15, margin:0, letterSpacing:"-0.3px" }}>
+            NEX<span style={{ color:"#38b249" }}>US</span>
+            <span style={{ fontWeight:400, fontSize:11, color:"rgba(255,255,255,0.6)", marginLeft:10 }}>Gestão de Riscos Psicossociais</span>
+          </p>
+          <p style={{ color:"rgba(255,255,255,0.5)", fontSize:9.5, margin:0 }}>NR-01 · NR-17 · ISO 45003 · eSocial · FAP/NTEP · Technogov Soluções</p>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ width:30, height:30, borderRadius:"50%", background:"#3a6aa8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#fff" }}>{avatarInicial}</div>
