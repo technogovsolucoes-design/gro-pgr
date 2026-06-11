@@ -35,6 +35,10 @@ export function AppProvider({ children }) {
   // ── Usuários (Admin only) ──
   const [usuarios, setUsuarios] = useState([]);
 
+  // ── Indicadores ──
+  const [absenteismo, setAbsenteismo] = useState([]);
+  const [fap, setFap]                 = useState(null);
+
   // ── Auth listener ──
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -117,6 +121,23 @@ export function AppProvider({ children }) {
     return unsub;
   }, [user, empresaAtiva]);
 
+  // ── Indicadores da empresa ativa ──
+  useEffect(() => {
+    if (!user || !empresaAtiva) { setAbsenteismo([]); setFap(null); return; }
+
+    const unsubAbs = onSnapshot(
+      collection(db, "empresas", empresaAtiva.id, "absenteismo"),
+      snap => setAbsenteismo(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+
+    const unsubFap = onSnapshot(
+      doc(db, "empresas", empresaAtiva.id, "fap", "atual"),
+      snap => setFap(snap.exists() ? snap.data() : null)
+    );
+
+    return () => { unsubAbs(); unsubFap(); };
+  }, [user, empresaAtiva]);
+
   // ── Usuários (Admin only) ──
   useEffect(() => {
     if (!user || userProfile?.perfil !== "Admin") { setUsuarios([]); return; }
@@ -197,6 +218,22 @@ export function AppProvider({ children }) {
       .finally(() => setSavingCheck(false));
   };
 
+  // ── Indicadores actions ──
+  const salvarAbsenteismo = async (dados) => {
+    if (!empresaAtiva || !dados.periodo) return;
+    await setDoc(doc(db, "empresas", empresaAtiva.id, "absenteismo", dados.periodo), dados);
+  };
+
+  const excluirAbsenteismo = async (periodo) => {
+    if (!empresaAtiva) return;
+    await deleteDoc(doc(db, "empresas", empresaAtiva.id, "absenteismo", periodo));
+  };
+
+  const salvarFAP = async (dados) => {
+    if (!empresaAtiva) return;
+    await setDoc(doc(db, "empresas", empresaAtiva.id, "fap", "atual"), dados);
+  };
+
   // ── Usuário actions ──
   const salvarUsuario = async (editUsuario) => {
     const { id, ...data } = editUsuario;
@@ -243,6 +280,8 @@ export function AppProvider({ children }) {
     usuarios, salvarUsuario,
     // Computed
     riscos,
+    // Indicadores
+    absenteismo, fap, salvarAbsenteismo, excluirAbsenteismo, salvarFAP,
     // Permissões
     isAdmin, canEdit,
   };

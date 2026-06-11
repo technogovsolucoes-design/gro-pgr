@@ -4,11 +4,30 @@ import { useApp } from "../context/AppContext";
 import { Card, SectionTitle } from "../components/ui";
 import { C, PIE_COLORS, FATORES } from "../constants";
 
+const calcTaxaAbs = ({ diasPerdidos, totalFuncionarios, diasUteis }) => {
+  if (!diasPerdidos || !totalFuncionarios || !diasUteis) return null;
+  return parseFloat(((diasPerdidos / (totalFuncionarios * diasUteis)) * 100).toFixed(2));
+};
+
 export default function Dashboard() {
-  const { empresaAtiva, riscos, setores } = useApp();
+  const { empresaAtiva, riscos, setores, absenteismo, fap } = useApp();
 
   const kpiCriticos = riscos.filter(r => r.score >= 13).length;
   const kpiAssedio  = riscos.filter(r => r.cat === "Suporte Social e Relações" && r.score >= 8).length;
+
+  const latestAbs = [...absenteismo].sort((a, b) => b.id.localeCompare(a.id))[0];
+  const taxaAbs   = latestAbs ? calcTaxaAbs(latestAbs) : null;
+  const absAlerta = taxaAbs !== null && taxaAbs > 3.5;
+  const absValor  = taxaAbs !== null ? `${taxaAbs}%` : "—";
+  const absSub    = taxaAbs !== null
+    ? `Meta ≤ 3,5% | ${absAlerta ? "Acima" : "Dentro"} da meta`
+    : "Sem dados — preencha Indicadores";
+
+  const fapValor  = fap?.valor != null ? String(fap.valor).replace(".", ",") : "—";
+  const fapAlerta = fap?.valor != null && fap.valor > 1;
+  const fapSub    = fap?.valor != null
+    ? `FAP ${fap.valor > 1 ? "> 1 → Majoração" : "< 1 → Redução"} do RAT`
+    : "Sem dados — preencha Indicadores";
 
   const dadosSetor = setores.map(s => {
     const rs = riscos.filter(r => r.setorId === s.id);
@@ -29,9 +48,9 @@ export default function Dashboard() {
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20 }}>
         {[
-          { label:"Absenteísmo CID-F (mock)", value:"8,4%", sub:"Meta ≤ 3,5% | +2,1pp YTD", icon:<Activity size={16}/>, bg:"#fef2f2", bc:"#fca5a5", ic:C.red },
+          { label:"Absenteísmo CID-F", value:absValor, sub:absSub, icon:<Activity size={16}/>, bg:absAlerta?"#fef2f2":taxaAbs!==null?"#f0fdf4":"#fffbeb", bc:absAlerta?"#fca5a5":taxaAbs!==null?"#86efac":"#fcd34d", ic:absAlerta?C.red:taxaAbs!==null?C.green:C.amber },
           { label:"Riscos Críticos / Catastróficos", value:kpiCriticos, sub:"Requerem AET imediata", icon:<AlertTriangle size={16}/>, bg:kpiCriticos>0?"#fef2f2":"#f0fdf4", bc:kpiCriticos>0?"#fca5a5":"#86efac", ic:kpiCriticos>0?C.red:C.green },
-          { label:"Alerta FAP (mock)", value:"1,47", sub:"FAP > 1 → Majoração RAT", icon:<TrendingUp size={16}/>, bg:"#fffbeb", bc:"#fcd34d", ic:C.amber },
+          { label:"FAP — Fator Acidentário", value:fapValor, sub:fapSub, icon:<TrendingUp size={16}/>, bg:fapAlerta?"#fffbeb":fap?.valor!=null?"#f0fdf4":"#fffbeb", bc:fapAlerta?"#fcd34d":fap?.valor!=null?"#86efac":"#fcd34d", ic:fapAlerta?C.amber:fap?.valor!=null?C.green:C.amber },
           { label:"Ocorrências CIPA+A", value:kpiAssedio, sub:"Assédio / Violência mapeados", icon:<Users size={16}/>, bg:kpiAssedio>0?"#fffbeb":"#f0fdf4", bc:kpiAssedio>0?"#fcd34d":"#86efac", ic:kpiAssedio>0?C.amber:C.green },
         ].map((k, i) => (
           <div key={i} style={{ background:k.bg, border:`1px solid ${k.bc}`, borderRadius:10, padding:"13px 15px" }}>
