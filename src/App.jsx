@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield, Building2, LogOut, ArrowLeft, Info, BarChart2, Users, Clipboard, FileText, UserCheck, Activity, Loader } from "lucide-react";
+import { Shield, Building2, LogOut, ArrowLeft, Info, BarChart2, Users, Clipboard, FileText, UserCheck, Activity, History, Loader } from "lucide-react";
 import { AppProvider, useApp } from "./context/AppContext";
 import LoginScreen from "./pages/LoginScreen";
 import EmpresaSelector from "./pages/EmpresaSelector";
@@ -10,6 +10,7 @@ import Levantamento from "./pages/Levantamento";
 import Matriz from "./pages/Matriz";
 import PlanoAcao from "./pages/PlanoAcao";
 import Indicadores from "./pages/Indicadores";
+import Historico from "./pages/Historico";
 import Usuarios from "./pages/Usuarios";
 import { C } from "./constants";
 
@@ -39,6 +40,7 @@ function AppContent() {
     { label:"Matriz",       icon:<Shield size={14}/> },
     { label:"Plano de Ação",icon:<FileText size={14}/> },
     { label:"Indicadores",  icon:<Activity size={14}/> },
+    { label:"Histórico",    icon:<History size={14}/> },
     ...(isAdmin ? [{ label:"Usuários", icon:<UserCheck size={14}/> }] : []),
   ];
 
@@ -50,6 +52,7 @@ function AppContent() {
     <Matriz onNavigate={setAba} />,
     <PlanoAcao onNavigate={setAba} />,
     <Indicadores />,
+    <Historico />,
     ...(isAdmin ? [<Usuarios />] : []),
   ];
 

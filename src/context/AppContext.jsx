@@ -4,6 +4,7 @@ import {
   doc, getDoc, setDoc, collection,
   addDoc, updateDoc, deleteDoc, onSnapshot,
   query, where, documentId, arrayUnion,
+  serverTimestamp, orderBy,
 } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { FATORES, EMP_FORM_VAZIO } from "../constants";
@@ -38,6 +39,10 @@ export function AppProvider({ children }) {
   // ── Indicadores ──
   const [absenteismo, setAbsenteismo] = useState([]);
   const [fap, setFap]                 = useState(null);
+
+  // ── Histórico de avaliações ──
+  const [historico, setHistorico]     = useState([]);
+  const [savingSnap, setSavingSnap]   = useState(false);
 
   // ── Auth listener ──
   useEffect(() => {
@@ -138,6 +143,16 @@ export function AppProvider({ children }) {
     return () => { unsubAbs(); unsubFap(); };
   }, [user, empresaAtiva]);
 
+  // ── Histórico da empresa ativa ──
+  useEffect(() => {
+    if (!user || !empresaAtiva) { setHistorico([]); return; }
+    const unsub = onSnapshot(
+      query(collection(db, "empresas", empresaAtiva.id, "historico"), orderBy("data", "desc")),
+      snap => setHistorico(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+    return unsub;
+  }, [user, empresaAtiva]);
+
   // ── Usuários (Admin only) ──
   useEffect(() => {
     if (!user || userProfile?.perfil !== "Admin") { setUsuarios([]); return; }
@@ -234,6 +249,22 @@ export function AppProvider({ children }) {
     await setDoc(doc(db, "empresas", empresaAtiva.id, "fap", "atual"), dados);
   };
 
+  const criarSnapshot = async (riscos, autor) => {
+    if (!empresaAtiva) return;
+    setSavingSnap(true);
+    const snap = {
+      data: serverTimestamp(),
+      autor: autor || "—",
+      totalRiscos: riscos.length,
+      criticos: riscos.filter(r => r.score >= 13).length,
+      altos: riscos.filter(r => r.score >= 8 && r.score < 13).length,
+      setoresAfetados: [...new Set(riscos.map(r => r.setor))].length,
+      riscos: riscos.map(({ fator, cat, setor, score, label, color, bg, aet }) => ({ fator, cat, setor, score, label, color, bg, aet })),
+    };
+    await addDoc(collection(db, "empresas", empresaAtiva.id, "historico"), snap);
+    setSavingSnap(false);
+  };
+
   // ── Usuário actions ──
   const salvarUsuario = async (editUsuario) => {
     const { id, ...data } = editUsuario;
@@ -282,6 +313,8 @@ export function AppProvider({ children }) {
     riscos,
     // Indicadores
     absenteismo, fap, salvarAbsenteismo, excluirAbsenteismo, salvarFAP,
+    // Histórico
+    historico, savingSnap, criarSnapshot,
     // Permissões
     isAdmin, canEdit,
   };
