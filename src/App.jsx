@@ -4,7 +4,8 @@ import {
 } from "firebase/auth";
 import {
   doc, getDoc, setDoc, collection,
-  getDocs, addDoc, updateDoc, deleteDoc, onSnapshot,
+  addDoc, updateDoc, deleteDoc, onSnapshot,
+  query, where, documentId, arrayUnion,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import {
@@ -15,7 +16,7 @@ import {
   Shield, AlertTriangle, FileText, BarChart2, Clipboard, Users,
   LogOut, Plus, Trash2, Edit2, Save, X, AlertCircle, Info,
   Printer, Activity, TrendingUp, Clock, CheckSquare,
-  ChevronRight, Building2, Eye, EyeOff, Loader,
+  Building2, Eye, EyeOff, Loader, ArrowLeft,
 } from "lucide-react";
 
 // ─── FATORES PSICOSSOCIAIS ────────────────────────────────────
@@ -73,6 +74,8 @@ const getRiskLabel = (score) => {
 const C = { navy:"#1e3a5f", navyMid:"#2d5382", blue:"#4a90d9", gray:"#64748b", border:"#e2e8f0", white:"#ffffff", bg:"#f8fafc", red:"#dc2626", amber:"#d97706", green:"#16a34a", text:"#0f172a", muted:"#64748b" };
 const PIE_COLORS = ["#2d5382","#4a90d9","#d97706","#dc2626","#7c3aed","#0f766e","#b45309"];
 
+const EMP_FORM_VAZIO = {razao:"",cnpj:"",cnae:"",endereco:"",responsavel:"",dataAvaliacao:"",grauRisco:"3"};
+
 // ─── UI HELPERS ───────────────────────────────────────────────
 const Btn = ({children,onClick,color=C.navyMid,outline=false,small=false,icon,disabled=false}) => (
   <button onClick={onClick} disabled={disabled} style={{display:"flex",alignItems:"center",gap:6,padding:small?"6px 12px":"9px 16px",borderRadius:8,border:`1px solid ${outline?color:"transparent"}`,background:outline?"transparent":color,color:outline?color:C.white,cursor:disabled?"not-allowed":"pointer",fontWeight:600,fontSize:small?11:12,opacity:disabled?0.6:1,fontFamily:"inherit"}}>
@@ -102,15 +105,6 @@ const exportarRelatorio = (tipo, empresa, riscos, userName, userPerfil) => {
       <td>${r.aet?"✔ AET Obrigatória":"PGR Comum"}</td>
       <td>${r.aet?"Imediato":r.score>=7?"60 dias":"90 dias"}</td>
     </tr>`).join("");
-  const acoes = {
-    "Demanda e Carga de Trabalho":"Revisão de carga horária + rodízio de funções + monitoramento eSocial S-2220",
-    "Controle e Autonomia":"Implantação de gestão participativa + metodologias ágeis",
-    "Suporte Social e Relações":"Canal de denúncia CIPA+A + treinamento de liderança + política anti-assédio",
-    "Reconhecimento e Recompensa":"Programa de reconhecimento + revisão salarial + plano de carreira",
-    "Interface Trabalho-Vida Privada":"Política de desconexão digital formalizada + controle de jornada ERP",
-    "Organização e Cultura":"Diagnóstico organizacional + coaching de liderança + política de saúde mental",
-    "Conteúdo e Significado do Trabalho":"Redesenho de tarefas + suporte psicológico + rotação de funções",
-  };
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>${tipo} — ${empresa?.razao||""}</title>
   <style>
@@ -152,32 +146,44 @@ const exportarRelatorio = (tipo, empresa, riscos, userName, userPerfil) => {
 
 // ─── APP PRINCIPAL ────────────────────────────────────────────
 export default function App() {
-  const [user, setUser]         = useState(null);
+  // Auth
+  const [user, setUser]               = useState(null);
   const [userProfile, setUserProfile] = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [loginEmail, setLE]     = useState("");
-  const [loginSenha, setLS]     = useState("");
-  const [showPwd, setShowPwd]   = useState(false);
-  const [loginErr, setLoginErr] = useState("");
-  const [loginLoading, setLL]   = useState(false);
+  const [loading, setLoading]         = useState(true);
+  const [loginEmail, setLE]           = useState("");
+  const [loginSenha, setLS]           = useState("");
+  const [showPwd, setShowPwd]         = useState(false);
+  const [loginErr, setLoginErr]       = useState("");
+  const [loginLoading, setLL]         = useState(false);
 
-  const [aba, setAba]           = useState(0);
-  const [empresa, setEmpresa]   = useState(null);
-  const [editEmp, setEditEmp]   = useState(false);
-  const [empForm, setEmpForm]   = useState({razao:"",cnpj:"",cnae:"",endereco:"",responsavel:"",dataAvaliacao:"",grauRisco:"3"});
+  // Seletor de empresas
+  const [empresas, setEmpresas]           = useState([]);
+  const [empresaAtiva, setEmpresaAtiva]   = useState(null);
+  const [loadingEmpresas, setLoadingEmpresas] = useState(false);
+  const [criandoEmpresa, setCriandoEmpresa]   = useState(false);
+  const [novaEmpForm, setNovaEmpForm]     = useState(EMP_FORM_VAZIO);
+  const [savingNovaEmp, setSavingNovaEmp] = useState(false);
+
+  // Empresa ativa — edição
+  const [editEmp, setEditEmp]     = useState(false);
+  const [empForm, setEmpForm]     = useState(EMP_FORM_VAZIO);
   const [savingEmp, setSavingEmp] = useState(false);
 
-  const [setores, setSetores]   = useState([]);
-  const [editSetor, setEditSetor] = useState(null);
+  // Setores
+  const [setores, setSetores]         = useState([]);
+  const [editSetor, setEditSetor]     = useState(null);
   const [addingSetor, setAddingSetor] = useState(false);
-  const [newSetor, setNewSetor] = useState({nome:"",responsavel:"",servidores:[],nFunc:0});
+  const [newSetor, setNewSetor]       = useState({nome:"",responsavel:"",servidores:[],nFunc:0});
   const [newServidor, setNewServidor] = useState("");
   const [savingSetor, setSavingSetor] = useState(false);
 
-  const [checklist, setChecklist] = useState({});
-  const [setorSel, setSetorSel]   = useState("");
-  const [catFiltro, setCatFiltro] = useState("Todas");
+  // Checklist
+  const [checklist, setChecklist]   = useState({});
+  const [setorSel, setSetorSel]     = useState("");
+  const [catFiltro, setCatFiltro]   = useState("Todas");
   const [savingCheck, setSavingCheck] = useState(false);
+
+  const [aba, setAba] = useState(0);
 
   // ── Auth listener ──
   useEffect(() => {
@@ -185,48 +191,83 @@ export default function App() {
       setUser(u);
       if (u) {
         const snap = await getDoc(doc(db, "usuarios", u.uid));
-        if (snap.exists()) setUserProfile(snap.data());
-        else setUserProfile({ nome: u.email, perfil: "Usuário" });
+        if (snap.exists()) {
+          setUserProfile(snap.data());
+        } else {
+          const defaultProfile = { nome: u.email, perfil: "Usuário", empresas: [] };
+          await setDoc(doc(db, "usuarios", u.uid), defaultProfile);
+          setUserProfile(defaultProfile);
+        }
       } else {
         setUserProfile(null);
+        setEmpresaAtiva(null);
+        setEmpresas([]);
       }
       setLoading(false);
     });
     return unsub;
   }, []);
 
-  // ── Carregar empresa ──
+  // ── Carregar lista de empresas do usuário ──
   useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(doc(db, "empresa", "dados"), (snap) => {
-      if (snap.exists()) {
-        setEmpresa(snap.data());
-        setEmpForm(snap.data());
+    if (!user || !userProfile) return;
+    setLoadingEmpresas(true);
+
+    if (userProfile.perfil === "Admin") {
+      const unsub = onSnapshot(collection(db, "empresas"), snap => {
+        setEmpresas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoadingEmpresas(false);
+      });
+      return unsub;
+    }
+
+    const ids = userProfile.empresas || [];
+    if (ids.length === 0) {
+      setEmpresas([]);
+      setLoadingEmpresas(false);
+      return;
+    }
+
+    const q = query(collection(db, "empresas"), where(documentId(), "in", ids));
+    const unsub = onSnapshot(q, snap => {
+      setEmpresas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoadingEmpresas(false);
+    });
+    return unsub;
+  }, [user, userProfile]);
+
+  // ── Manter empresaAtiva sincronizada quando a lista atualiza ──
+  useEffect(() => {
+    if (!empresaAtiva) return;
+    const atualizada = empresas.find(e => e.id === empresaAtiva.id);
+    if (atualizada) setEmpresaAtiva(atualizada);
+  }, [empresas]);
+
+  // ── Carregar setores da empresa ativa ──
+  useEffect(() => {
+    if (!user || !empresaAtiva) { setSetores([]); return; }
+    const unsub = onSnapshot(
+      collection(db, "empresas", empresaAtiva.id, "setores"),
+      snap => setSetores(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+    return unsub;
+  }, [user, empresaAtiva]);
+
+  // ── Carregar checklist da empresa ativa ──
+  useEffect(() => {
+    if (!user || !empresaAtiva) { setChecklist({}); return; }
+    const unsub = onSnapshot(
+      collection(db, "empresas", empresaAtiva.id, "checklist"),
+      snap => {
+        const data = {};
+        snap.docs.forEach(d => { data[d.id] = d.data(); });
+        setChecklist(data);
       }
-    });
+    );
     return unsub;
-  }, [user]);
+  }, [user, empresaAtiva]);
 
-  // ── Carregar setores ──
-  useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(collection(db, "setores"), (snap) => {
-      setSetores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
-  }, [user]);
-
-  // ── Carregar checklist ──
-  useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(collection(db, "checklist"), (snap) => {
-      const data = {};
-      snap.docs.forEach(d => { data[d.id] = d.data(); });
-      setChecklist(data);
-    });
-    return unsub;
-  }, [user]);
-
+  // ── Auth ──
   const login = async () => {
     setLL(true); setLoginErr("");
     try {
@@ -237,49 +278,91 @@ export default function App() {
     setLL(false);
   };
 
-  const logout = () => signOut(auth);
+  const logout = () => {
+    setEmpresaAtiva(null);
+    setEmpresas([]);
+    setSetores([]);
+    setChecklist({});
+    signOut(auth);
+  };
+
+  // ── Empresas ──
+  const selecionarEmpresa = (emp) => {
+    setEmpresaAtiva(emp);
+    setEmpForm({ razao:emp.razao||"", cnpj:emp.cnpj||"", cnae:emp.cnae||"", endereco:emp.endereco||"", responsavel:emp.responsavel||"", dataAvaliacao:emp.dataAvaliacao||"", grauRisco:emp.grauRisco||"3" });
+    setSetorSel("");
+    setAba(0);
+  };
+
+  const voltarSeletor = () => {
+    setEmpresaAtiva(null);
+    setSetores([]);
+    setChecklist({});
+    setSetorSel("");
+    setEditEmp(false);
+    setCriandoEmpresa(false);
+  };
+
+  const criarEmpresa = async () => {
+    if (!novaEmpForm.razao) return;
+    setSavingNovaEmp(true);
+    try {
+      const docRef = await addDoc(collection(db, "empresas"), novaEmpForm);
+      await updateDoc(doc(db, "usuarios", user.uid), {
+        empresas: arrayUnion(docRef.id),
+      });
+      setUserProfile(p => ({ ...p, empresas: [...(p.empresas || []), docRef.id] }));
+      setNovaEmpForm(EMP_FORM_VAZIO);
+      setCriandoEmpresa(false);
+      selecionarEmpresa({ id: docRef.id, ...novaEmpForm });
+    } finally {
+      setSavingNovaEmp(false);
+    }
+  };
 
   const salvarEmpresa = async () => {
+    if (!empresaAtiva) return;
     setSavingEmp(true);
-    await setDoc(doc(db, "empresa", "dados"), empForm);
-    setEmpresa(empForm);
+    await setDoc(doc(db, "empresas", empresaAtiva.id), empForm);
     setEditEmp(false);
     setSavingEmp(false);
   };
 
+  // ── Setores ──
   const salvarSetor = async () => {
-    if (!newSetor.nome) return;
+    if (!newSetor.nome || !empresaAtiva) return;
     setSavingSetor(true);
-    await addDoc(collection(db, "setores"), { ...newSetor, servidores: newSetor.servidores });
+    await addDoc(collection(db, "empresas", empresaAtiva.id, "setores"), { ...newSetor });
     setNewSetor({ nome:"",responsavel:"",servidores:[],nFunc:0 });
     setAddingSetor(false);
     setSavingSetor(false);
   };
 
   const atualizarSetor = async () => {
-    if (!editSetor) return;
+    if (!editSetor || !empresaAtiva) return;
     setSavingSetor(true);
     const { id, ...data } = editSetor;
-    await updateDoc(doc(db, "setores", id), data);
+    await updateDoc(doc(db, "empresas", empresaAtiva.id, "setores", id), data);
     setEditSetor(null);
     setSavingSetor(false);
   };
 
   const excluirSetor = async (id) => {
-    if (!window.confirm("Excluir este setor?")) return;
-    await deleteDoc(doc(db, "setores", id));
+    if (!window.confirm("Excluir este setor?") || !empresaAtiva) return;
+    await deleteDoc(doc(db, "empresas", empresaAtiva.id, "setores", id));
   };
 
+  // ── Checklist ──
   const salvarItemChecklist = async (key, val) => {
+    if (!empresaAtiva) return;
     setSavingCheck(true);
-    await setDoc(doc(db, "checklist", key), val);
+    await setDoc(doc(db, "empresas", empresaAtiva.id, "checklist", key), val);
     setSavingCheck(false);
   };
 
   const setCheckField = (id, sid, field, val) => {
     const key = `${id}__${sid}`;
-    const current = checklist[key] || {};
-    const updated = { ...current, [field]: val };
+    const updated = { ...(checklist[key] || {}), [field]: val };
     setChecklist(p => ({ ...p, [key]: updated }));
     salvarItemChecklist(key, updated);
   };
@@ -359,27 +442,128 @@ export default function App() {
     </div>
   );
 
+  const avatarInicial = (userProfile?.nome||"?").split(" ").map(p=>p[0]).slice(0,2).join("").toUpperCase();
+
+  // ── Seletor de Empresas ──
+  if (!empresaAtiva) return (
+    <div style={{fontFamily:"system-ui,sans-serif",background:C.bg,minHeight:"100vh",color:C.text}}>
+      {/* Header */}
+      <div style={{background:C.navy,padding:"12px 20px",display:"flex",alignItems:"center",gap:12}}>
+        <Shield size={20} color="#93c5fd"/>
+        <div style={{flex:1}}>
+          <p style={{color:"#fff",fontWeight:600,fontSize:14,margin:0}}>GRO/PGR — SST</p>
+          <p style={{color:"#93c5fd",fontSize:10,margin:0}}>Gestão de Riscos Psicossociais · NR-01</p>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:30,height:30,borderRadius:"50%",background:"#3a6aa8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff"}}>{avatarInicial}</div>
+          <div style={{textAlign:"right"}}>
+            <p style={{color:"#fff",fontSize:12,margin:0,fontWeight:500}}>{userProfile?.nome||user.email}</p>
+            <p style={{color:"#93c5fd",fontSize:10,margin:0}}>{userProfile?.perfil||"Usuário"}</p>
+          </div>
+          <button onClick={logout} style={{background:"none",border:"none",cursor:"pointer",color:"#93c5fd",marginLeft:4}}><LogOut size={15}/></button>
+        </div>
+      </div>
+
+      <div style={{padding:"32px 20px",maxWidth:960,margin:"0 auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:28}}>
+          <div>
+            <p style={{fontSize:20,fontWeight:700,color:C.navy,margin:"0 0 4px"}}>Selecionar Empresa</p>
+            <p style={{fontSize:13,color:C.muted,margin:0}}>Olá, <strong>{userProfile?.nome}</strong> — escolha a empresa para continuar ou cadastre uma nova.</p>
+          </div>
+          <Btn onClick={()=>setCriandoEmpresa(p=>!p)} color={C.navyMid} icon={<Plus size={13}/>}>Nova Empresa</Btn>
+        </div>
+
+        {/* Formulário Nova Empresa */}
+        {criandoEmpresa && (
+          <Card style={{marginBottom:24,border:`1px solid ${C.navyMid}`}}>
+            <SectionTitle><Building2 size={14}/> Cadastrar Nova Empresa</SectionTitle>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <Input label="Razão Social" value={novaEmpForm.razao} onChange={v=>setNovaEmpForm(p=>({...p,razao:v}))} required/>
+              <Input label="CNPJ" value={novaEmpForm.cnpj} onChange={v=>setNovaEmpForm(p=>({...p,cnpj:v}))}/>
+              <Input label="CNAE Principal" value={novaEmpForm.cnae} onChange={v=>setNovaEmpForm(p=>({...p,cnae:v}))}/>
+              <Input label="Grau de Risco (GR 1–4)" value={novaEmpForm.grauRisco} onChange={v=>setNovaEmpForm(p=>({...p,grauRisco:v}))}/>
+              <Input label="Endereço Completo" value={novaEmpForm.endereco} onChange={v=>setNovaEmpForm(p=>({...p,endereco:v}))}/>
+              <Input label="Responsável Técnico" value={novaEmpForm.responsavel} onChange={v=>setNovaEmpForm(p=>({...p,responsavel:v}))}/>
+              <Input label="Data da Avaliação" type="date" value={novaEmpForm.dataAvaliacao} onChange={v=>setNovaEmpForm(p=>({...p,dataAvaliacao:v}))}/>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              <Btn onClick={criarEmpresa} color={C.green} disabled={savingNovaEmp||!novaEmpForm.razao} icon={savingNovaEmp?<Loader size={12}/>:<Save size={12}/>}>
+                {savingNovaEmp?"Criando...":"Criar e Entrar"}
+              </Btn>
+              <Btn onClick={()=>{setCriandoEmpresa(false);setNovaEmpForm(EMP_FORM_VAZIO);}} outline color={C.gray} icon={<X size={12}/>}>Cancelar</Btn>
+            </div>
+          </Card>
+        )}
+
+        {/* Lista de Empresas */}
+        {loadingEmpresas ? (
+          <div style={{textAlign:"center",padding:"40px 0"}}>
+            <Loader size={24} color={C.navyMid}/>
+            <p style={{color:C.muted,fontSize:13,marginTop:10}}>Carregando empresas...</p>
+          </div>
+        ) : empresas.length === 0 ? (
+          <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"32px",textAlign:"center"}}>
+            <Building2 size={32} color="#ca8a04" style={{marginBottom:10}}/>
+            <p style={{fontSize:14,fontWeight:600,color:"#92400e",margin:"0 0 6px"}}>Nenhuma empresa cadastrada</p>
+            <p style={{fontSize:12,color:"#a16207",margin:0}}>Clique em <strong>Nova Empresa</strong> para começar.</p>
+          </div>
+        ) : (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
+            {empresas.map(e => (
+              <div key={e.id} onClick={()=>selecionarEmpresa(e)}
+                style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:10,padding:18,cursor:"pointer",transition:"border-color 0.15s",position:"relative"}}
+                onMouseEnter={ev=>ev.currentTarget.style.borderColor=C.navyMid}
+                onMouseLeave={ev=>ev.currentTarget.style.borderColor=C.border}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
+                  <div style={{width:38,height:38,borderRadius:8,background:"#eff6ff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <Building2 size={18} color={C.navyMid}/>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontWeight:700,fontSize:13,color:C.navy,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.razao||"—"}</p>
+                    <p style={{fontSize:11,color:C.muted,margin:0}}>CNPJ: {e.cnpj||"—"}</p>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {e.cnae && <span style={{background:"#f0f9ff",color:"#0369a1",fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:500}}>CNAE {e.cnae}</span>}
+                  {e.grauRisco && <span style={{background:"#f0fdf4",color:"#15803d",fontSize:10,padding:"2px 8px",borderRadius:4,fontWeight:500}}>GR {e.grauRisco}</span>}
+                  {e.responsavel && <span style={{background:C.bg,color:C.muted,fontSize:10,padding:"2px 8px",borderRadius:4}}>{e.responsavel}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── App Principal (com empresa ativa) ──
   const ABAS = [
-    {label:"Dashboard",  icon:<BarChart2 size={14}/>},
-    {label:"Empresa",    icon:<Building2 size={14}/>},
-    {label:"Setores",    icon:<Users size={14}/>},
+    {label:"Dashboard",   icon:<BarChart2 size={14}/>},
+    {label:"Empresa",     icon:<Building2 size={14}/>},
+    {label:"Setores",     icon:<Users size={14}/>},
     {label:"Levantamento",icon:<Clipboard size={14}/>},
-    {label:"Matriz",     icon:<Shield size={14}/>},
+    {label:"Matriz",      icon:<Shield size={14}/>},
     {label:"Plano de Ação",icon:<FileText size={14}/>},
   ];
-
-  const avatarInicial = (userProfile?.nome||"?").split(" ").map(p=>p[0]).slice(0,2).join("").toUpperCase();
 
   return (
     <div style={{fontFamily:"system-ui,sans-serif",background:C.bg,minHeight:"100vh",color:C.text}}>
 
       {/* Header */}
-      <div style={{background:C.navy,padding:"12px 20px",display:"flex",alignItems:"center",gap:12}}>
+      <div style={{background:C.navy,padding:"10px 20px",display:"flex",alignItems:"center",gap:12}}>
         <Shield size={20} color="#93c5fd"/>
         <div style={{flex:1}}>
           <p style={{color:"#fff",fontWeight:600,fontSize:14,margin:0}}>GRO/PGR — Riscos Psicossociais</p>
           <p style={{color:"#93c5fd",fontSize:10,margin:0}}>NR-01 | NR-17 | ISO 45003 | eSocial | FAP/NTEP</p>
         </div>
+
+        {/* Empresa ativa + troca */}
+        <button onClick={voltarSeletor} style={{display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:7,padding:"5px 10px",cursor:"pointer",maxWidth:220}}>
+          <Building2 size={12} color="#93c5fd" style={{flexShrink:0}}/>
+          <span style={{color:"#e2e8f0",fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,textAlign:"left"}}>{empresaAtiva.razao||"Empresa"}</span>
+          <ArrowLeft size={11} color="#93c5fd" style={{flexShrink:0}}/>
+        </button>
+
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:30,height:30,borderRadius:"50%",background:"#3a6aa8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff"}}>{avatarInicial}</div>
           <div style={{textAlign:"right"}}>
@@ -413,7 +597,7 @@ export default function App() {
         {aba===0 && (
           <div>
             <p style={{fontSize:12,color:C.muted,marginBottom:14}}>
-              Empresa: <strong>{empresa?.razao||"Não cadastrada"}</strong> | CNAE: {empresa?.cnae||"—"} | Responsável: {empresa?.responsavel||"—"}
+              Empresa: <strong>{empresaAtiva.razao||"—"}</strong> | CNAE: {empresaAtiva.cnae||"—"} | Responsável: {empresaAtiva.responsavel||"—"}
             </p>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
               {[
@@ -487,18 +671,13 @@ export default function App() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <SectionTitle><Building2 size={14}/> Dados da Empresa Avaliada</SectionTitle>
               {!editEmp
-                ? <Btn onClick={()=>{setEmpForm(empresa||empForm);setEditEmp(true);}} outline color={C.navyMid} small icon={<Edit2 size={12}/>}>Editar</Btn>
+                ? <Btn onClick={()=>{setEmpForm({razao:empresaAtiva.razao||"",cnpj:empresaAtiva.cnpj||"",cnae:empresaAtiva.cnae||"",endereco:empresaAtiva.endereco||"",responsavel:empresaAtiva.responsavel||"",dataAvaliacao:empresaAtiva.dataAvaliacao||"",grauRisco:empresaAtiva.grauRisco||"3"});setEditEmp(true);}} outline color={C.navyMid} small icon={<Edit2 size={12}/>}>Editar</Btn>
                 : <div style={{display:"flex",gap:8}}>
                     <Btn onClick={salvarEmpresa} color={C.green} small disabled={savingEmp} icon={<Save size={12}/>}>{savingEmp?"Salvando...":"Salvar"}</Btn>
                     <Btn onClick={()=>setEditEmp(false)} outline color={C.gray} small icon={<X size={12}/>}>Cancelar</Btn>
                   </div>
               }
             </div>
-            {!empresa && !editEmp && (
-              <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"12px 16px",fontSize:12,color:"#92400e",marginBottom:16}}>
-                Empresa ainda não cadastrada. Clique em <strong>Editar</strong> para preencher.
-              </div>
-            )}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
               {[
                 {label:"Razão Social",key:"razao",required:true},
@@ -513,7 +692,7 @@ export default function App() {
                   ? <Input key={f.key} label={f.label} type={f.type||"text"} value={empForm[f.key]||""} required={f.required} onChange={v=>setEmpForm(p=>({...p,[f.key]:v}))}/>
                   : <div key={f.key} style={{marginBottom:12}}>
                       <p style={{fontSize:10.5,color:C.muted,margin:"0 0 2px",fontWeight:500}}>{f.label}</p>
-                      <p style={{fontSize:13,fontWeight:500,margin:0}}>{empresa?.[f.key]||"—"}</p>
+                      <p style={{fontSize:13,fontWeight:500,margin:0}}>{empresaAtiva[f.key]||"—"}</p>
                     </div>
               ))}
             </div>
@@ -748,9 +927,9 @@ export default function App() {
         {aba===5 && (
           <div>
             <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
-              <Btn onClick={()=>exportarRelatorio("Anexo GRO — Plano de Ação PGR",empresa,riscos,userProfile?.nome||user.email,userProfile?.perfil||"")} color={C.navyMid} icon={<Printer size={13}/>}>Gerar Anexo GRO / PGR</Btn>
-              <Btn onClick={()=>exportarRelatorio("Subsídios de Defesa — Nexo Técnico (NTEP)",empresa,riscos,userProfile?.nome||user.email,userProfile?.perfil||"")} color="#7c3aed" icon={<Shield size={13}/>}>Subsídios Defesa NTEP</Btn>
-              <Btn onClick={()=>exportarRelatorio("Encaminhamento ao PCMSO — Riscos Psicossociais",empresa,riscos,userProfile?.nome||user.email,userProfile?.perfil||"")} color="#0f766e" icon={<FileText size={13}/>}>Encaminhar ao PCMSO</Btn>
+              <Btn onClick={()=>exportarRelatorio("Anexo GRO — Plano de Ação PGR",empresaAtiva,riscos,userProfile?.nome||user.email,userProfile?.perfil||"")} color={C.navyMid} icon={<Printer size={13}/>}>Gerar Anexo GRO / PGR</Btn>
+              <Btn onClick={()=>exportarRelatorio("Subsídios de Defesa — Nexo Técnico (NTEP)",empresaAtiva,riscos,userProfile?.nome||user.email,userProfile?.perfil||"")} color="#7c3aed" icon={<Shield size={13}/>}>Subsídios Defesa NTEP</Btn>
+              <Btn onClick={()=>exportarRelatorio("Encaminhamento ao PCMSO — Riscos Psicossociais",empresaAtiva,riscos,userProfile?.nome||user.email,userProfile?.perfil||"")} color="#0f766e" icon={<FileText size={13}/>}>Encaminhar ao PCMSO</Btn>
             </div>
 
             {riscos.length===0
