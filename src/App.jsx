@@ -24,7 +24,7 @@ export default function App() {
 }
 
 function AppContent() {
-  const { loading, user, empresaAtiva, userProfile, logout, voltarSeletor, isAdmin } = useApp();
+  const { loading, user, empresaAtiva, userProfile, logout, voltarSeletor, isAdmin, canManageUsers } = useApp();
   const [aba, setAba] = useState(0);
 
   if (loading) return <LoadingScreen />;
@@ -42,7 +42,7 @@ function AppContent() {
     { label:"Plano de Ação",icon:<FileText size={14}/> },
     { label:"Indicadores",  icon:<Activity size={14}/> },
     { label:"Histórico",    icon:<History size={14}/> },
-    ...(isAdmin ? [{ label:"Usuários", icon:<UserCheck size={14}/> }] : []),
+    ...(canManageUsers ? [{ label:"Usuários", icon:<UserCheck size={14}/> }] : []),
   ];
 
   const PAGES = [
@@ -54,7 +54,7 @@ function AppContent() {
     <PlanoAcao onNavigate={setAba} />,
     <Indicadores />,
     <Historico />,
-    ...(isAdmin ? [<Usuarios />] : []),
+    ...(canManageUsers ? [<Usuarios />] : []),
   ];
 
   return (

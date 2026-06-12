@@ -4,10 +4,10 @@ import { useApp } from "../context/AppContext";
 import { Btn, Input, Card, SectionTitle, Badge } from "../components/ui";
 import { C, PERFIS, PERFIL_CORES } from "../constants";
 
-const FORM_VAZIO = { nome:"", email:"", senha:"", confirmarSenha:"", perfil:"Gestor", empresas:[] };
+const FORM_VAZIO = { nome:"", email:"", senha:"", confirmarSenha:"", perfil:"SESMT", empresas:[] };
 
 export default function Usuarios() {
-  const { usuarios, empresas, salvarUsuario, criarUsuario, excluirUsuario, user: userAtual } = useApp();
+  const { usuarios, empresas, salvarUsuario, criarUsuario, excluirUsuario, user: userAtual, isAdmin, isGestor } = useApp();
 
   const [editUsuario, setEditUsuario] = useState(null);
   const [saving, setSaving]           = useState(false);
@@ -66,8 +66,17 @@ export default function Usuarios() {
     });
   };
 
+  // Regras de hierarquia
+  const podeEditar  = (u) => isAdmin || (isGestor && (u.id === userAtual?.uid || u.perfil === "SESMT"));
+  const podeExcluir = (u) => isAdmin && u.id !== userAtual?.uid;
+  const perfisDisponiveis = isAdmin ? PERFIS : ["SESMT"];
+  const perfisEditaveis = (u) => {
+    if (isAdmin) return PERFIS;
+    if (isGestor && u.id === userAtual?.uid) return PERFIS.filter(p => p !== "Admin");
+    return ["SESMT"];
+  };
+
   const handleExcluir = async (u) => {
-    if (u.id === userAtual?.uid) return alert("Você não pode excluir o próprio usuário.");
     if (!window.confirm(`Excluir ${u.nome || u.email} do sistema?`)) return;
     await excluirUsuario(u.id);
   };
@@ -216,8 +225,10 @@ export default function Usuarios() {
                       </div>
                     </div>
                     <div style={{ display:"flex", gap:6 }}>
-                      <Btn onClick={() => setEditUsuario({ ...u })} outline color={C.navyMid} small icon={<Edit2 size={11}/>}>Editar</Btn>
-                      {!ehEuMesmo && (
+                      {podeEditar(u) && (
+                        <Btn onClick={() => setEditUsuario({ ...u })} outline color={C.navyMid} small icon={<Edit2 size={11}/>}>Editar</Btn>
+                      )}
+                      {podeExcluir(u) && (
                         <Btn onClick={() => handleExcluir(u)} outline color={C.red} small icon={<Trash2 size={11}/>}>Excluir</Btn>
                       )}
                     </div>
@@ -234,7 +245,7 @@ export default function Usuarios() {
                           onChange={e => setEditUsuario(p => ({ ...p, perfil:e.target.value }))}
                           style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, fontFamily:"inherit", color:C.text, background:C.white }}
                         >
-                          {PERFIS.map(p => <option key={p} value={p}>{p}</option>)}
+                          {perfisEditaveis(editUsuario).map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                       </div>
                     </div>

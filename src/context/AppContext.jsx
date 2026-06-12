@@ -326,8 +326,12 @@ export function AppProvider({ children }) {
   }, [checklist, setores]);
 
   // ── Permissões ──
-  const isAdmin = userProfile?.perfil === "Admin";
-  const canEdit = isAdmin || userProfile?.perfil === "SESMT";
+  const isAdmin   = userProfile?.perfil === "Admin";
+  const isGestor  = userProfile?.perfil === "Gestor";
+  const isSESMT   = userProfile?.perfil === "SESMT";
+  const canEdit          = isAdmin || isGestor || isSESMT; // avaliações/levantamento/setores
+  const canCreateEmpresa = isAdmin || isGestor;            // criar empresa
+  const canManageUsers   = isAdmin || isGestor;            // painel de usuários
 
   const value = {
     // Auth
@@ -349,7 +353,7 @@ export function AppProvider({ children }) {
     // Histórico
     historico, savingSnap, criarSnapshot,
     // Permissões
-    isAdmin, canEdit,
+    isAdmin, isGestor, isSESMT, canEdit, canCreateEmpresa, canManageUsers,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
