@@ -46,6 +46,18 @@ export function AppProvider({ children }) {
   const [historico, setHistorico]     = useState([]);
   const [savingSnap, setSavingSnap]   = useState(false);
 
+  // ── EPI ──
+  const [epis, setEpis]                   = useState([]);
+  const [funcionarios, setFuncionarios]   = useState([]);
+  const [entregas, setEntregas]           = useState([]);
+
+  // ── Treinamentos ──
+  const [treinamentos, setTreinamentos] = useState([]);
+
+  // ── PCMSO / eSocial ──
+  const [exames, setExames] = useState([]);
+  const [cats, setCats]     = useState([]);
+
   // ── Auth listener ──
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -163,6 +175,44 @@ export function AppProvider({ children }) {
     });
     return unsub;
   }, [user, userProfile?.perfil]);
+
+  // ── EPI: epis + funcionarios + entregas ──
+  useEffect(() => {
+    if (!user || !empresaAtiva) {
+      setEpis([]); setFuncionarios([]); setEntregas([]); return;
+    }
+    const unsubEpis = onSnapshot(
+      collection(db, "empresas", empresaAtiva.id, "epis"),
+      snap => setEpis(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubFuncs = onSnapshot(
+      collection(db, "empresas", empresaAtiva.id, "funcionarios"),
+      snap => setFuncionarios(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubEnt = onSnapshot(
+      query(collection(db, "empresas", empresaAtiva.id, "entregas"), orderBy("data", "desc")),
+      snap => setEntregas(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return () => { unsubEpis(); unsubFuncs(); unsubEnt(); };
+  }, [user, empresaAtiva]);
+
+  // ── Treinamentos ──
+  useEffect(() => {
+    if (!user || !empresaAtiva) { setTreinamentos([]); return; }
+    const unsub = onSnapshot(
+      query(collection(db, "empresas", empresaAtiva.id, "treinamentos"), orderBy("data", "desc")),
+      snap => setTreinamentos(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return unsub;
+  }, [user, empresaAtiva]);
+
+  // ── PCMSO / eSocial ──
+  useEffect(() => {
+    if (!user || !empresaAtiva) { setExames([]); setCats([]); return; }
+    const unsubEx = onSnapshot(
+      query(collection(db, "empresas", empresaAtiva.id, "exames"), orderBy("data", "desc")),
+      snap => setExames(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubCats = onSnapshot(
+      query(collection(db, "empresas", empresaAtiva.id, "cats"), orderBy("data", "desc")),
+      snap => setCats(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return () => { unsubEx(); unsubCats(); };
+  }, [user, empresaAtiva]);
 
   // ── Auth actions ──
   const login = async (email, senha) => {
@@ -304,6 +354,78 @@ export function AppProvider({ children }) {
     await deleteDoc(doc(db, "usuarios", uid));
   };
 
+  // ── EPI actions ──
+  const salvarEpi = async (epi) => {
+    if (!empresaAtiva) return;
+    if (epi.id) {
+      const { id, ...data } = epi;
+      await updateDoc(doc(db, "empresas", empresaAtiva.id, "epis", id), data);
+    } else {
+      await addDoc(collection(db, "empresas", empresaAtiva.id, "epis"), epi);
+    }
+  };
+  const excluirEpi = (id) => deleteDoc(doc(db, "empresas", empresaAtiva.id, "epis", id));
+
+  // ── Funcionário actions ──
+  const salvarFuncionario = async (func) => {
+    if (!empresaAtiva) return;
+    if (func.id) {
+      const { id, ...data } = func;
+      await updateDoc(doc(db, "empresas", empresaAtiva.id, "funcionarios", id), data);
+    } else {
+      await addDoc(collection(db, "empresas", empresaAtiva.id, "funcionarios"), func);
+    }
+  };
+  const excluirFuncionario = (id) => deleteDoc(doc(db, "empresas", empresaAtiva.id, "funcionarios", id));
+  const atualizarCredencialFuncionario = async (id, credentialId) => {
+    await updateDoc(doc(db, "empresas", empresaAtiva.id, "funcionarios", id), { credentialId });
+  };
+
+  // ── Entrega actions ──
+  const registrarEntrega = async (entrega) => {
+    if (!empresaAtiva) return;
+    await addDoc(collection(db, "empresas", empresaAtiva.id, "entregas"), {
+      ...entrega, data: serverTimestamp(),
+    });
+  };
+  const excluirEntrega = (id) => deleteDoc(doc(db, "empresas", empresaAtiva.id, "entregas", id));
+
+  // ── Treinamento actions ──
+  const salvarTreinamento = async (treino) => {
+    if (!empresaAtiva) return;
+    if (treino.id) {
+      const { id, ...data } = treino;
+      await updateDoc(doc(db, "empresas", empresaAtiva.id, "treinamentos", id), data);
+    } else {
+      await addDoc(collection(db, "empresas", empresaAtiva.id, "treinamentos"), treino);
+    }
+  };
+  const excluirTreinamento = (id) => deleteDoc(doc(db, "empresas", empresaAtiva.id, "treinamentos", id));
+
+  // ── Exame actions ──
+  const salvarExame = async (exame) => {
+    if (!empresaAtiva) return;
+    if (exame.id) {
+      const { id, ...data } = exame;
+      await updateDoc(doc(db, "empresas", empresaAtiva.id, "exames", id), data);
+    } else {
+      await addDoc(collection(db, "empresas", empresaAtiva.id, "exames"), exame);
+    }
+  };
+  const excluirExame = (id) => deleteDoc(doc(db, "empresas", empresaAtiva.id, "exames", id));
+
+  // ── CAT actions ──
+  const registrarCAT = async (cat) => {
+    if (!empresaAtiva) return;
+    await addDoc(collection(db, "empresas", empresaAtiva.id, "cats"), {
+      ...cat, data: serverTimestamp(), status: "Pendente",
+    });
+  };
+  const excluirCAT = (id) => deleteDoc(doc(db, "empresas", empresaAtiva.id, "cats", id));
+  const atualizarStatusCAT = async (id, status, protocolo) => {
+    await updateDoc(doc(db, "empresas", empresaAtiva.id, "cats", id), { status, protocolo: protocolo || "" });
+  };
+
   // ── Riscos computados ──
   const riscos = useMemo(() => {
     const r = [];
@@ -354,6 +476,17 @@ export function AppProvider({ children }) {
     historico, savingSnap, criarSnapshot,
     // Permissões
     isAdmin, isGestor, isSESMT, canEdit, canCreateEmpresa, canManageUsers,
+    // EPI
+    epis, funcionarios, entregas,
+    salvarEpi, excluirEpi,
+    salvarFuncionario, excluirFuncionario, atualizarCredencialFuncionario,
+    registrarEntrega, excluirEntrega,
+    // Treinamentos
+    treinamentos, salvarTreinamento, excluirTreinamento,
+    // PCMSO / eSocial
+    exames, cats,
+    salvarExame, excluirExame,
+    registrarCAT, excluirCAT, atualizarStatusCAT,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

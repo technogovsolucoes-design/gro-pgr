@@ -60,3 +60,46 @@ export const PERFIL_CORES = {
   Gestor:  { color:"#166534", bg:"#dcfce7" },
   Usuário: { color:"#64748b", bg:"#f1f5f9" },
 };
+
+// ── Módulo EPI ──────────────────────────────────────────────────────────────
+export const EPI_TIPOS = [
+  "Proteção da Cabeça", "Proteção dos Olhos e Face", "Proteção Auditiva",
+  "Proteção Respiratória", "Proteção dos Membros Superiores",
+  "Proteção dos Membros Inferiores", "Proteção do Tronco",
+  "Proteção do Corpo Inteiro", "Proteção contra Quedas", "Outro",
+];
+
+export const EPI_MOTIVOS = [
+  "1ª via", "Reposição por desgaste", "Troca", "Extravio/perda",
+  "Vencimento de CA", "Mudança de função",
+];
+
+// ── Módulo Treinamentos ────────────────────────────────────────────────────
+export const TREINAMENTO_NRS = [
+  "NR-01 (Disposições Gerais)", "NR-05 (CIPA)", "NR-06 (EPI)",
+  "NR-07 (PCMSO)", "NR-09 (Agentes Ambientais)", "NR-10 (Elétrica)",
+  "NR-11 (Movimentação e Armazenagem)", "NR-12 (Máquinas e Equipamentos)",
+  "NR-15 (Atividades Insalubres)", "NR-17 (Ergonomia)",
+  "NR-18 (Construção Civil)", "NR-20 (Inflamáveis/Explosivos)",
+  "NR-23 (Proteção Contra Incêndio)", "NR-25 (Resíduos Industriais)",
+  "NR-33 (Espaço Confinado)", "NR-35 (Trabalho em Altura)",
+  "Primeiros Socorros", "Integração SST", "LGPD / Privacidade",
+  "Combate a Incêndio", "Outro",
+];
+
+// ── Módulo PCMSO / eSocial ─────────────────────────────────────────────────
+export const EXAME_TIPOS = [
+  "Admissional", "Periódico", "Demissional",
+  "Retorno ao Trabalho", "Mudança de Risco",
+];
+
+export const EXAME_RESULTADOS = ["Apto", "Apto com restrições", "Inapto"];
+
+export const CAT_TIPOS = ["Acidente Típico", "Acidente de Trajeto", "Doença Ocupacional"];
+
+export const ESOCIAL_EVENTOS = [
+  { id:"S-2210", nome:"S-2210 — CAT (Comunicação de Acidente)", prazo:"Até o 1º dia útil seguinte ao acidente" },
+  { id:"S-2220", nome:"S-2220 — Monitoramento da Saúde do Trabalhador (ASO)", prazo:"Até dia 15 do mês seguinte" },
+  { id:"S-2240", nome:"S-2240 — Condições Ambientais (Físico/Químico/Biológico)", prazo:"Antes do início das atividades com exposição" },
+  { id:"S-2245", nome:"S-2245 — Treinamentos e Capacitações", prazo:"Até dia 15 do mês seguinte" },
+];

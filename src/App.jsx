@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, LogOut, ArrowLeft, Info, BarChart2, Users, Clipboard, FileText, UserCheck, Activity, History, Shield, Loader } from "lucide-react";
+import { Building2, LogOut, ArrowLeft, Info, BarChart2, Users, Clipboard, FileText, UserCheck, Activity, History, Shield, Loader, HardHat, GraduationCap, BookOpen } from "lucide-react";
 import { NexusLogo } from "./assets/NexusLogo";
 import { AppProvider, useApp } from "./context/AppContext";
 import LoginScreen from "./pages/LoginScreen";
@@ -13,6 +13,9 @@ import PlanoAcao from "./pages/PlanoAcao";
 import Indicadores from "./pages/Indicadores";
 import Historico from "./pages/Historico";
 import Usuarios from "./pages/Usuarios";
+import GestaoEPI from "./pages/GestaoEPI";
+import Treinamentos from "./pages/Treinamentos";
+import PGR from "./pages/PGR";
 import { C } from "./constants";
 
 export default function App() {
@@ -42,6 +45,9 @@ function AppContent() {
     { label:"Plano de Ação",icon:<FileText size={14}/> },
     { label:"Indicadores",  icon:<Activity size={14}/> },
     { label:"Histórico",    icon:<History size={14}/> },
+    { label:"EPIs",         icon:<HardHat size={14}/> },
+    { label:"Treinamentos", icon:<GraduationCap size={14}/> },
+    { label:"PGR / PCMSO",  icon:<BookOpen size={14}/> },
     ...(canManageUsers ? [{ label:"Usuários", icon:<UserCheck size={14}/> }] : []),
   ];
 
@@ -54,6 +60,9 @@ function AppContent() {
     <PlanoAcao onNavigate={setAba} />,
     <Indicadores />,
     <Historico />,
+    <GestaoEPI />,
+    <Treinamentos />,
+    <PGR />,
     ...(canManageUsers ? [<Usuarios />] : []),
   ];
 
