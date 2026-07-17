@@ -8,7 +8,7 @@
  */
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
-const MODEL         = "claude-haiku-4-5-20251001"; // rápido e econômico para chat
+const MODEL         = "claude-3-5-haiku-20241022"; // rápido e econômico para chat
 const MAX_TOKENS    = 1024;
 const TIMEOUT_MS    = 30000;
 
@@ -79,10 +79,13 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      console.error("[NEXIA]", response.status, err);
-      if (response.status === 401) return res.status(401).json({ erro: "API key inválida. Verifique ANTHROPIC_API_KEY." });
+      const detalhe = err?.error?.message || "";
+      console.error("[NEXIA]", response.status, detalhe || err);
+      if (response.status === 401) return res.status(401).json({ erro: "API key inválida. Verifique ANTHROPIC_API_KEY no Vercel." });
+      if (response.status === 403) return res.status(403).json({ erro: "API key sem permissão para este modelo. Verifique o plano Anthropic." });
       if (response.status === 429) return res.status(429).json({ erro: "Muitas requisições. Aguarde alguns segundos." });
-      return res.status(502).json({ erro: "Erro na API de IA. Tente novamente." });
+      if (response.status === 404) return res.status(404).json({ erro: `Modelo não encontrado: ${MODEL}` });
+      return res.status(502).json({ erro: `Erro ${response.status} na API Anthropic${detalhe ? `: ${detalhe}` : ". Tente novamente."}` });
     }
 
     const data = await response.json();
