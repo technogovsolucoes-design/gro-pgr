@@ -7,78 +7,13 @@ import { db } from "../../firebase";
 import { useApp } from "../../context/AppContext";
 import { Btn, Card, Input } from "../../components/ui";
 import { C } from "../../constants";
+import { COPSOQ_CURTA, COPSOQ_MEDIA, COPSOQ_LONGA, buildDimensoesConfig, buildItensFlat } from "../../data/copsoq";
 
-// ─── COPSOQ II VERSÃO CURTA ────────────────────────────────────────────────
-const COPSOQ_CURTA = {
-  nome: "COPSOQ II — Versão Curta (19 itens)",
-  dimensoes: [
-    {
-      nome: "Demandas Quantitativas",
-      itens: [
-        "Seu trabalho exige que você trabalhe muito rapidamente?",
-        "Você tem tempo suficiente para realizar todas as tarefas do seu trabalho?",
-      ],
-    },
-    {
-      nome: "Influência no Trabalho",
-      itens: [
-        "Você tem grande influência sobre as decisões relativas ao seu trabalho?",
-        "Você pode influenciar a quantidade de trabalho designada a você?",
-      ],
-    },
-    {
-      nome: "Possibilidades de Desenvolvimento",
-      itens: [
-        "Seu trabalho requer que você tome iniciativa?",
-        "Seu trabalho lhe fornece oportunidades para aprender coisas novas?",
-      ],
-    },
-    {
-      nome: "Suporte Social de Colegas",
-      itens: [
-        "Seus colegas de trabalho estão dispostos a ouvi-lo(a) sobre seus problemas de trabalho?",
-        "Seus colegas de trabalho colaboram com você?",
-      ],
-    },
-    {
-      nome: "Suporte Social de Superiores",
-      itens: [
-        "Seu superior imediato reconhece o bom trabalho que você realiza?",
-        "Seu superior oferece ajuda e apoio quando você precisa?",
-      ],
-    },
-    {
-      nome: "Insegurança no Emprego",
-      itens: [
-        "Você está preocupado(a) com a possibilidade de ser demitido(a)?",
-        "Você está preocupado(a) com o futuro do seu emprego?",
-      ],
-    },
-    {
-      nome: "Saúde Geral",
-      itens: [
-        "Em geral, você diria que sua saúde é:",
-        "Você tem se sentido estressado(a) ultimamente?",
-        "Você tem conseguido dormir bem?",
-        "Você tem se sentido feliz?",
-        "Você tem se sentido calmo(a) e tranquilo(a)?",
-      ],
-    },
-  ],
-  escala: ["Sempre", "Frequentemente", "Às vezes", "Raramente", "Nunca/Quase nunca"],
-  pesos: { Sempre: 5, Frequentemente: 4, "Às vezes": 3, Raramente: 2, "Nunca/Quase nunca": 1 },
-};
-
-const TIPOS = [
-  "COPSOQ II — Versão Curta",
-  "COPSOQ II — Versão Média (personalizado)",
-  "HSE-IT",
-  "Personalizado",
-];
+// ─── Versões disponíveis ──────────────────────────────────────────────────
+const VERSOES = [COPSOQ_CURTA, COPSOQ_MEDIA, COPSOQ_LONGA];
 
 const CANAIS = ["Email", "SMS", "WhatsApp", "Link Direto"];
 
-// ─── ESTILOS COMUNS ───────────────────────────────────────────────────────
 const tabStyle = (active) => ({
   padding: "8px 20px",
   borderRadius: 8,
@@ -112,16 +47,34 @@ const selectStyle = {
   boxSizing: "border-box",
 };
 
-// ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────
+// Badge de nível de risco NR-01
+function RiscoBadge({ nivel }) {
+  const cfg = {
+    verde:    { cor: "#16a34a", bg: "#dcfce7", label: "0–33 Verde" },
+    amarelo:  { cor: "#d97706", bg: "#fef3c7", label: "34–66 Amarelo" },
+    vermelho: { cor: "#dc2626", bg: "#fee2e2", label: "67–100 Vermelho" },
+  };
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+      {Object.values(cfg).map((c) => (
+        <span key={c.label} style={{ padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 700, background: c.bg, color: c.cor, border: `1px solid ${c.cor}44` }}>
+          {c.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ─── COMPONENTE PRINCIPAL ──────────────────────────────────────────────────
 export default function QuestionarioCOPSOQ() {
   const { empresaAtiva, setores } = useApp();
   const [tab, setTab] = useState("lista");
   const [questionarios, setQuestionarios] = useState([]);
   const [respostas, setRespostas] = useState([]);
 
-  // Novo questionário — estado do formulário
+  // Formulário
   const [nome, setNome] = useState("");
-  const [tipo, setTipo] = useState(TIPOS[0]);
+  const [versaoId, setVersaoId] = useState("curta");
   const [setoresSelecionados, setSetoresSelecionados] = useState([]);
   const [todosSetores, setTodosSetores] = useState(true);
   const [anonimato, setAnonimato] = useState(true);
@@ -129,10 +82,12 @@ export default function QuestionarioCOPSOQ() {
   const [canais, setCanais] = useState({ "Link Direto": true });
   const [salvando, setSalvando] = useState(false);
   const [linkGerado, setLinkGerado] = useState(null);
+  const [previewAberto, setPreviewAberto] = useState(false);
 
   const empresaId = empresaAtiva?.id;
+  const versaoSelecionada = VERSOES.find((v) => v.id === versaoId) || COPSOQ_CURTA;
 
-  // ─── Listeners ─────────────────────────────────────────────────────────
+  // ─── Listeners ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!empresaId) return;
     const q = query(
@@ -155,7 +110,6 @@ export default function QuestionarioCOPSOQ() {
     );
   }, [empresaId]);
 
-  // ─── Contagem de respostas por questionário ─────────────────────────────
   const respostasPorQ = useMemo(() => {
     const map = {};
     respostas.forEach((r) => {
@@ -164,31 +118,30 @@ export default function QuestionarioCOPSOQ() {
     return map;
   }, [respostas]);
 
-  // ─── Ações ─────────────────────────────────────────────────────────────
+  // ─── Criar questionário ─────────────────────────────────────────────────
   const handleCriar = async () => {
     if (!nome.trim()) { alert("Informe o nome do questionário."); return; }
     if (!empresaId) return;
     setSalvando(true);
     try {
-      const itens =
-        tipo === "COPSOQ II — Versão Curta"
-          ? COPSOQ_CURTA.dimensoes.flatMap((d) => d.itens)
-          : [];
-
+      const versao = VERSOES.find((v) => v.id === versaoId) || COPSOQ_CURTA;
+      const itens = buildItensFlat(versao);
+      const dimensoesConfig = buildDimensoesConfig(versao);
       const setoresIds = todosSetores ? setores.map((s) => s.id) : setoresSelecionados;
-      const totalFuncionarios = 0; // a ser preenchido conforme integração
 
       const payload = {
         nome: nome.trim(),
-        tipo,
+        tipo: versao.nome,
+        versaoId: versao.id,
         itens,
+        dimensoesConfig,
         setoresIds,
         anonimato,
         prazo,
         canais: Object.keys(canais).filter((c) => canais[c]),
         status: "Aberto",
         criacao: serverTimestamp(),
-        totalFuncionarios,
+        totalFuncionarios: 0,
       };
 
       const ref = await addDoc(
@@ -196,22 +149,20 @@ export default function QuestionarioCOPSOQ() {
         payload
       );
 
-      // Escreve cópia pública para que /responder/:id funcione sem auth
       await setDoc(doc(db, "questionarios_publicos", ref.id), {
         ...payload,
         empresaId,
       });
 
-      const appUrl = window.location.origin;
-      setLinkGerado(`${appUrl}/responder/${ref.id}`);
-      // reset
+      setLinkGerado(`${window.location.origin}/responder/${ref.id}`);
       setNome("");
-      setTipo(TIPOS[0]);
+      setVersaoId("curta");
       setSetoresSelecionados([]);
       setTodosSetores(true);
       setAnonimato(true);
       setPrazo("");
       setCanais({ "Link Direto": true });
+      setPreviewAberto(false);
       setTab("lista");
     } catch (e) {
       alert("Erro ao criar questionário: " + e.message);
@@ -222,9 +173,8 @@ export default function QuestionarioCOPSOQ() {
 
   const handleFechar = async (id) => {
     if (!window.confirm("Fechar este questionário? Não serão aceitas novas respostas.")) return;
-    await updateDoc(doc(db, "empresas", empresaId, "questionarios_config", id), {
-      status: "Fechado",
-    });
+    await updateDoc(doc(db, "empresas", empresaId, "questionarios_config", id), { status: "Fechado" });
+    await updateDoc(doc(db, "questionarios_publicos", id), { status: "Fechado" }).catch(() => {});
   };
 
   const handleExcluir = async (id) => {
@@ -232,9 +182,7 @@ export default function QuestionarioCOPSOQ() {
     await deleteDoc(doc(db, "empresas", empresaId, "questionarios_config", id));
   };
 
-  const toggleCanal = (c) =>
-    setCanais((prev) => ({ ...prev, [c]: !prev[c] }));
-
+  const toggleCanal = (c) => setCanais((prev) => ({ ...prev, [c]: !prev[c] }));
   const toggleSetor = (id) =>
     setSetoresSelecionados((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
@@ -246,114 +194,138 @@ export default function QuestionarioCOPSOQ() {
       {/* Cabeçalho */}
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ margin: 0, color: C.text, fontSize: 20, fontWeight: 700 }}>
-          Questionários Psicossociais — COPSOQ
+          Questionários Psicossociais — COPSOQ II-Br
         </h2>
         <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 12 }}>
-          Gestão de questionários formais para avaliação de fatores psicossociais
+          Instrumento validado para identificação de fatores de risco psicossocial · NR-01 / GRO / PGR · ISO 45003
         </p>
       </div>
 
-      {/* Link gerado (notificação) */}
+      {/* Escala NR-01 — informativo */}
+      <div style={{ marginBottom: 20, padding: "12px 16px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10 }}>
+        <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: C.navyMid }}>
+          Classificação de Risco — NR-01 §1.4.1 (escala 0–100)
+        </p>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          {[
+            { label: "0–33", nome: "Verde — Favorável", desc: "Condição saudável; manter políticas atuais.", cor: "#16a34a", bg: "#dcfce7" },
+            { label: "34–66", nome: "Amarelo — Intermediário", desc: "Atenção; exige monitoramento e plano de ação.", cor: "#d97706", bg: "#fef3c7" },
+            { label: "67–100", nome: "Vermelho — Desfavorável", desc: "Risco alto; intervenção imediata no PGR.", cor: "#dc2626", bg: "#fee2e2" },
+          ].map((item) => (
+            <div key={item.nome} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ padding: "3px 9px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: item.bg, color: item.cor, border: `1px solid ${item.cor}44`, whiteSpace: "nowrap" }}>
+                {item.label} {item.nome}
+              </span>
+              <span style={{ fontSize: 11, color: C.muted }}>{item.desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Link gerado */}
       {linkGerado && (
-        <Card style={{ marginBottom: 16, background: "#f0fdf4", border: `1px solid ${C.green}` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Card style={{ marginBottom: 16, background: "#f0fdf4", border: `1px solid #86efac` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
             <div>
-              <p style={{ margin: 0, color: C.green, fontWeight: 700, fontSize: 13 }}>
+              <p style={{ margin: "0 0 4px", color: "#16a34a", fontWeight: 700, fontSize: 13 }}>
                 Questionário criado com sucesso!
               </p>
-              <p style={{ margin: "4px 0 0", fontSize: 12, color: C.text }}>
+              <p style={{ margin: 0, fontSize: 12, color: C.text }}>
                 Link de resposta:{" "}
-                <code style={{ background: "#e0f2fe", padding: "2px 6px", borderRadius: 4 }}>
+                <code style={{ background: "#e0f2fe", padding: "2px 6px", borderRadius: 4, wordBreak: "break-all" }}>
                   {linkGerado}
                 </code>
               </p>
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: C.muted }}>
+                Compartilhe com os trabalhadores. Respostas ficam disponíveis em tempo real em "Respostas" e "Resultados".
+              </p>
             </div>
-            <Btn small outline color={C.green} onClick={() => setLinkGerado(null)}>
-              Fechar
-            </Btn>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <Btn small outline color={C.navyMid} onClick={() => navigator.clipboard?.writeText(linkGerado)}>
+                Copiar Link
+              </Btn>
+              <Btn small outline color={C.gray} onClick={() => setLinkGerado(null)}>
+                Fechar
+              </Btn>
+            </div>
           </div>
         </Card>
       )}
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 20, background: C.white, padding: 4, borderRadius: 10, border: `1px solid ${C.border}`, width: "fit-content" }}>
-        <button style={tabStyle(tab === "lista")} onClick={() => setTab("lista")}>
-          Questionários
-        </button>
-        <button style={tabStyle(tab === "novo")} onClick={() => setTab("novo")}>
-          Novo Questionário
-        </button>
+        <button style={tabStyle(tab === "lista")} onClick={() => setTab("lista")}>Questionários</button>
+        <button style={tabStyle(tab === "novo")} onClick={() => setTab("novo")}>+ Novo Questionário</button>
       </div>
 
-      {/* ─── TAB LISTA ──────────────────────────────────────────────────── */}
+      {/* ─── TAB LISTA ───────────────────────────────────────────────────── */}
       {tab === "lista" && (
         <div>
           {questionarios.length === 0 ? (
             <Card>
               <p style={{ textAlign: "center", color: C.muted, fontSize: 13, margin: 0 }}>
-                Nenhum questionário cadastrado. Clique em "Novo Questionário" para começar.
+                Nenhum questionário cadastrado. Clique em "+ Novo Questionário" para começar.
               </p>
             </Card>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {questionarios.map((q) => {
-                const respostasQ = respostasPorQ[q.id] || 0;
-                const progresso =
-                  q.totalFuncionarios > 0
-                    ? Math.round((respostasQ / q.totalFuncionarios) * 100)
-                    : 0;
+                const nRespostas = respostasPorQ[q.id] || 0;
+                const progresso = q.totalFuncionarios > 0
+                  ? Math.round((nRespostas / q.totalFuncionarios) * 100)
+                  : 0;
                 const aberto = q.status === "Aberto";
 
                 return (
                   <Card key={q.id}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
-                      {/* Info */}
                       <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
                           <span style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{q.nome}</span>
                           <span style={{
                             padding: "2px 10px", borderRadius: 12, fontSize: 11, fontWeight: 600,
                             background: aberto ? "#dcfce7" : "#f1f5f9",
-                            color: aberto ? C.green : C.muted,
+                            color: aberto ? "#16a34a" : C.muted,
                           }}>
                             {q.status}
                           </span>
                         </div>
+                        <p style={{ margin: "0 0 2px", fontSize: 12, color: C.muted }}>
+                          {q.tipo} · {q.itens?.length || "?"} itens · {q.dimensoesConfig?.length || "?"} dimensões
+                        </p>
                         <p style={{ margin: "0 0 4px", fontSize: 12, color: C.muted }}>
-                          Tipo: {q.tipo} · Anonimato: {q.anonimato ? "Sim" : "Não"}
-                          {q.prazo ? ` · Prazo: ${q.prazo}` : ""}
+                          Anonimato: {q.anonimato ? "Sim" : "Não"}
+                          {q.prazo ? ` · Prazo: ${new Date(q.prazo).toLocaleDateString("pt-BR")}` : ""}
                         </p>
                         <p style={{ margin: "0 0 8px", fontSize: 12, color: C.muted }}>
-                          {respostasQ} resposta{respostasQ !== 1 ? "s" : ""} recebida{respostasQ !== 1 ? "s" : ""}
+                          {nRespostas} resposta{nRespostas !== 1 ? "s" : ""} recebida{nRespostas !== 1 ? "s" : ""}
                         </p>
-                        {/* Barra de progresso */}
                         {aberto && q.totalFuncionarios > 0 && (
-                          <div style={{ marginTop: 6 }}>
+                          <div style={{ marginTop: 4 }}>
                             <p style={{ margin: "0 0 4px", fontSize: 11, color: C.muted }}>
-                              Participação: {progresso}% ({respostasQ}/{q.totalFuncionarios})
+                              Participação: {progresso}% ({nRespostas}/{q.totalFuncionarios})
                             </p>
-                            <div style={{ background: C.border, borderRadius: 4, height: 8, overflow: "hidden" }}>
+                            <div style={{ background: C.border, borderRadius: 4, height: 6, overflow: "hidden" }}>
                               <div style={{ width: `${progresso}%`, height: "100%", background: C.navyMid, transition: "width 0.3s" }} />
                             </div>
                           </div>
                         )}
-                        {/* Link */}
                         {aberto && (
                           <p style={{ margin: "8px 0 0", fontSize: 11, color: C.muted }}>
                             Link:{" "}
-                            <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4 }}>
-                              nexus-sst.app/responder/{q.id}
+                            <code style={{ background: "#f1f5f9", padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>
+                              {window.location.origin}/responder/{q.id}
                             </code>
                           </p>
                         )}
                       </div>
-                      {/* Ações */}
                       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                        <Btn small outline color={C.navyMid} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/responder/${q.id}`)}>
-                          Ver Link
+                        <Btn small outline color={C.navyMid}
+                          onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/responder/${q.id}`)}>
+                          Copiar Link
                         </Btn>
                         {aberto && (
-                          <Btn small outline color={C.amber} onClick={() => handleFechar(q.id)}>
+                          <Btn small outline color="#d97706" onClick={() => handleFechar(q.id)}>
                             Fechar
                           </Btn>
                         )}
@@ -370,64 +342,116 @@ export default function QuestionarioCOPSOQ() {
         </div>
       )}
 
-      {/* ─── TAB NOVO ───────────────────────────────────────────────────── */}
+      {/* ─── TAB NOVO ────────────────────────────────────────────────────── */}
       {tab === "novo" && (
-        <div style={{ maxWidth: 700 }}>
+        <div style={{ maxWidth: 780 }}>
           <Card>
-            <h3 style={{ margin: "0 0 16px", fontSize: 15, color: C.text }}>Criar Novo Questionário</h3>
+            <h3 style={{ margin: "0 0 20px", fontSize: 15, color: C.text }}>Criar Novo Questionário COPSOQ II-Br</h3>
 
             <Input
-              label="Nome *"
+              label="Nome do Questionário *"
               value={nome}
               onChange={setNome}
-              placeholder="Ex.: Avaliação Psicossocial 2024 — Todos os Setores"
+              placeholder="Ex.: Avaliação Psicossocial 2025 — Unidade SP"
               required
             />
 
-            {/* Tipo */}
-            <div style={{ marginBottom: 12 }}>
-              <label style={labelStyle}>Tipo de Questionário *</label>
-              <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={selectStyle}>
-                {TIPOS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
+            {/* Seleção de Versão */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ ...labelStyle, marginBottom: 10 }}>Versão do COPSOQ II-Br *</label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                {VERSOES.map((v) => {
+                  const ativo = versaoId === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => setVersaoId(v.id)}
+                      style={{
+                        padding: "14px 12px", borderRadius: 10, textAlign: "left", cursor: "pointer",
+                        border: `2px solid ${ativo ? C.navyMid : C.border}`,
+                        background: ativo ? "#eff6ff" : C.white,
+                        transition: "all 0.15s", fontFamily: "inherit",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: ativo ? C.navyMid : C.text }}>
+                          {v.id === "curta" ? "Versão Curta" : v.id === "media" ? "Versão Média" : "Versão Longa"}
+                        </span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 8,
+                          background: ativo ? C.navyMid : C.border,
+                          color: ativo ? "#fff" : C.muted,
+                        }}>
+                          {v.totalItens} itens
+                        </span>
+                      </div>
+                      <p style={{ margin: "0 0 4px", fontSize: 11, color: C.muted, lineHeight: 1.4 }}>
+                        {v.uso}
+                      </p>
+                      <p style={{ margin: 0, fontSize: 10, color: ativo ? C.navyMid : C.muted, fontWeight: 600 }}>
+                        ⏱ {v.tempo} · {v.dimensoes.length} dimensões
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Preview COPSOQ curta */}
-            {tipo === "COPSOQ II — Versão Curta" && (
-              <div style={{ marginBottom: 16, background: "#f8fafc", border: `1px solid ${C.border}`, borderRadius: 8, padding: 12 }}>
-                <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: C.navyMid }}>
-                  Preview — 19 itens em 7 dimensões
-                </p>
-                {COPSOQ_CURTA.dimensoes.map((d, di) => (
-                  <div key={di} style={{ marginBottom: 10 }}>
-                    <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600, color: C.text }}>
-                      {di + 1}. {d.nome}
-                    </p>
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {d.itens.map((item, ii) => (
-                        <li key={ii} style={{ fontSize: 11, color: C.muted, marginBottom: 2 }}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-                <p style={{ margin: "8px 0 0", fontSize: 11, color: C.muted }}>
-                  Escala: {COPSOQ_CURTA.escala.join(" · ")}
+            {/* Alerta versão longa */}
+            {versaoId === "longa" && (
+              <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 8 }}>
+                <p style={{ margin: 0, fontSize: 12, color: "#92400e" }}>
+                  <strong>Atenção:</strong> A Versão Longa é recomendada para pesquisa científica, avaliação pericial e análise de nexo causal. Para uso rotineiro em GRO/PGR, prefira a Versão Curta ou Média.
                 </p>
               </div>
             )}
+
+            {/* Preview de dimensões */}
+            <div style={{ marginBottom: 16 }}>
+              <button
+                onClick={() => setPreviewAberto(!previewAberto)}
+                style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, color: C.navyMid, fontWeight: 600, fontFamily: "inherit" }}>
+                {previewAberto ? "▲ Ocultar itens" : "▼ Visualizar itens e dimensões"}
+              </button>
+
+              {previewAberto && (
+                <div style={{ marginTop: 12, background: "#f8fafc", border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, maxHeight: 400, overflowY: "auto" }}>
+                  <p style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 700, color: C.navyMid }}>
+                    {versaoSelecionada.nome} — {versaoSelecionada.totalItens} itens em {versaoSelecionada.dimensoes.length} dimensões
+                  </p>
+                  {versaoSelecionada.dimensoes.map((d, di) => (
+                    <div key={di} style={{ marginBottom: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{di + 1}. {d.nome}</span>
+                        <span style={{
+                          fontSize: 10, padding: "1px 6px", borderRadius: 8, fontWeight: 600,
+                          background: d.favoravel ? "#dcfce7" : "#fee2e2",
+                          color: d.favoravel ? "#16a34a" : "#dc2626",
+                        }}>
+                          {d.favoravel ? "↑ Favorável" : "↑ Demanda"}
+                        </span>
+                        <span style={{ fontSize: 10, color: C.muted }}>{d.itens.length} itens</span>
+                      </div>
+                      <ul style={{ margin: 0, paddingLeft: 18 }}>
+                        {d.itens.map((item, ii) => (
+                          <li key={ii} style={{ fontSize: 11, color: C.muted, marginBottom: 2, lineHeight: 1.4 }}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  <p style={{ margin: "12px 0 0", fontSize: 11, color: C.muted }}>
+                    Escala: Nunca/Quase nunca · Raramente · Às vezes · Frequentemente · Sempre
+                  </p>
+                </div>
+              )}
+            </div>
 
             {/* Setores */}
             <div style={{ marginBottom: 12 }}>
               <label style={labelStyle}>Setor(es) Alvo</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <input
-                  type="checkbox"
-                  id="todos-setores"
-                  checked={todosSetores}
-                  onChange={(e) => setTodosSetores(e.target.checked)}
-                />
+                <input type="checkbox" id="todos-setores" checked={todosSetores}
+                  onChange={(e) => setTodosSetores(e.target.checked)} />
                 <label htmlFor="todos-setores" style={{ fontSize: 12, color: C.text, cursor: "pointer" }}>
                   Todos os setores
                 </label>
@@ -436,11 +460,9 @@ export default function QuestionarioCOPSOQ() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: 10, background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
                   {setores.map((s) => (
                     <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer" }}>
-                      <input
-                        type="checkbox"
+                      <input type="checkbox"
                         checked={setoresSelecionados.includes(s.id)}
-                        onChange={() => toggleSetor(s.id)}
-                      />
+                        onChange={() => toggleSetor(s.id)} />
                       {s.nome}
                     </label>
                   ))}
@@ -454,11 +476,11 @@ export default function QuestionarioCOPSOQ() {
               <div style={{ display: "flex", gap: 16 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
                   <input type="radio" name="anonimato" checked={anonimato} onChange={() => setAnonimato(true)} />
-                  Sim (anônimo)
+                  Sim — anônimo (recomendado para maior sinceridade)
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
                   <input type="radio" name="anonimato" checked={!anonimato} onChange={() => setAnonimato(false)} />
-                  Não (identificado)
+                  Não — identificado
                 </label>
               </div>
             </div>
@@ -472,25 +494,36 @@ export default function QuestionarioCOPSOQ() {
             />
 
             {/* Canais */}
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 20 }}>
               <label style={labelStyle}>Canais de Distribuição</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
                 {CANAIS.map((c) => (
                   <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={!!canais[c]}
-                      onChange={() => toggleCanal(c)}
-                    />
+                    <input type="checkbox" checked={!!canais[c]} onChange={() => toggleCanal(c)} />
                     {c}
                   </label>
                 ))}
               </div>
             </div>
 
+            {/* Resumo */}
+            <div style={{ marginBottom: 20, padding: "12px 16px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8 }}>
+              <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#15803d" }}>Resumo do questionário a ser criado</p>
+              <p style={{ margin: 0, fontSize: 11, color: "#166534" }}>
+                {versaoSelecionada.nome} · {versaoSelecionada.totalItens} itens · {versaoSelecionada.dimensoes.length} dimensões ·{" "}
+                Anonimato: {anonimato ? "Sim" : "Não"} ·{" "}
+                {todosSetores ? "Todos os setores" : `${setoresSelecionados.length} setor(es)`} ·{" "}
+                {Object.keys(canais).filter((c) => canais[c]).join(", ") || "Nenhum canal"} ·{" "}
+                Tempo: {versaoSelecionada.tempo}
+              </p>
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: "#166534" }}>
+                Classificação: Verde (0–33) · Amarelo (34–66) · Vermelho (67–100) — NR-01 §1.4.1
+              </p>
+            </div>
+
             <div style={{ display: "flex", gap: 8 }}>
               <Btn onClick={handleCriar} disabled={salvando}>
-                {salvando ? "Criando..." : "Criar Questionário"}
+                {salvando ? "Criando..." : "Criar e Gerar Link"}
               </Btn>
               <Btn outline color={C.gray} onClick={() => setTab("lista")}>
                 Cancelar

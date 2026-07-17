@@ -8,8 +8,18 @@ import { db } from "../../firebase";
 import { useApp } from "../../context/AppContext";
 import { Btn, Card, Input } from "../../components/ui";
 import { C } from "../../constants";
+import { ESCALA, calcularRiscoScore, classificar } from "../../data/copsoq";
 
-const ESCALA = ["Sempre", "Frequentemente", "Às vezes", "Raramente", "Nunca/Quase nunca"];
+// Compatibilidade com questionários antigos (sem dimensoesConfig)
+const DIMS_LEGADO = [
+  { nome: "Demandas Quantitativas",        count: 2, favoravel: false },
+  { nome: "Influência no Trabalho",        count: 2, favoravel: true  },
+  { nome: "Possibilidades de Desenvolvimento", count: 2, favoravel: true  },
+  { nome: "Suporte Social de Colegas",     count: 2, favoravel: true  },
+  { nome: "Suporte Social de Superiores",  count: 2, favoravel: true  },
+  { nome: "Insegurança no Emprego",        count: 2, favoravel: false },
+  { nome: "Saúde e Bem-estar Geral",       count: 5, favoravel: true  },
+];
 
 const labelStyle = {
   fontSize: 11,
@@ -125,20 +135,18 @@ export default function RespostasPsico() {
     const totalEsperado = questionarioFiltroObj?.totalFuncionarios || 0;
     const taxa = totalEsperado > 0 ? Math.round((total / totalEsperado) * 100) : null;
 
-    // Média geral: média de todos os valores numéricos registrados
-    let somaTotal = 0;
-    let contTotal = 0;
-    const PESOS = { Sempre: 5, Frequentemente: 4, "Às vezes": 3, Raramente: 2, "Nunca/Quase nunca": 1 };
-    respostasFiltradas.forEach((r) => {
-      if (r.respostas) {
-        Object.values(r.respostas).forEach((v) => {
-          if (PESOS[v]) { somaTotal += PESOS[v]; contTotal++; }
-        });
-      }
-    });
-    const media = contTotal > 0 ? (somaTotal / contTotal).toFixed(2) : null;
+    // Score global de risco (0-100)
+    const dimsConfig = questionarioFiltroObj?.dimensoesConfig || DIMS_LEGADO;
+    let scoreGlobal = null;
+    if (respostasFiltradas.length > 0) {
+      const scores = calcularRiscoScore(respostasFiltradas, dimsConfig)
+        .filter((d) => d.risco !== null)
+        .map((d) => d.risco);
+      if (scores.length) scoreGlobal = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    }
+    const classifGlobal = classificar(scoreGlobal);
 
-    return { total, taxa, media };
+    return { total, taxa, scoreGlobal, classifGlobal };
   }, [respostasFiltradas, questionarioFiltroObj]);
 
   // ─── Lançamento manual ───────────────────────────────────────────────
@@ -234,23 +242,28 @@ export default function RespostasPsico() {
 
           {/* KPIs */}
           <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-            <Card style={{ flex: 1, minWidth: 140 }}>
+            <Card style={{ flex: 1, minWidth: 130 }}>
               <p style={{ margin: 0, fontSize: 11, color: C.muted }}>Total de Respostas</p>
               <p style={{ margin: "4px 0 0", fontSize: 26, fontWeight: 700, color: C.navyMid }}>
                 {kpis.total}
               </p>
             </Card>
-            <Card style={{ flex: 1, minWidth: 140 }}>
+            <Card style={{ flex: 1, minWidth: 130 }}>
               <p style={{ margin: 0, fontSize: 11, color: C.muted }}>Taxa de Participação</p>
-              <p style={{ margin: "4px 0 0", fontSize: 26, fontWeight: 700, color: kpis.taxa === null ? C.muted : (kpis.taxa >= 60 ? C.green : kpis.taxa >= 30 ? C.amber : C.red) }}>
+              <p style={{ margin: "4px 0 0", fontSize: 26, fontWeight: 700, color: kpis.taxa === null ? C.muted : kpis.taxa >= 60 ? "#16a34a" : kpis.taxa >= 30 ? "#d97706" : "#dc2626" }}>
                 {kpis.taxa !== null ? `${kpis.taxa}%` : "—"}
               </p>
             </Card>
-            <Card style={{ flex: 1, minWidth: 140 }}>
-              <p style={{ margin: 0, fontSize: 11, color: C.muted }}>Média Geral (1-5)</p>
-              <p style={{ margin: "4px 0 0", fontSize: 26, fontWeight: 700, color: C.navyMid }}>
-                {kpis.media ?? "—"}
+            <Card style={{ flex: 1, minWidth: 130, border: kpis.scoreGlobal !== null ? `2px solid ${kpis.classifGlobal.cor}` : undefined, background: kpis.scoreGlobal !== null ? kpis.classifGlobal.bg : undefined }}>
+              <p style={{ margin: 0, fontSize: 11, color: kpis.scoreGlobal !== null ? kpis.classifGlobal.cor : C.muted, fontWeight: 600 }}>Risco Global (0–100)</p>
+              <p style={{ margin: "4px 0 0", fontSize: 26, fontWeight: 700, color: kpis.scoreGlobal !== null ? kpis.classifGlobal.cor : C.muted }}>
+                {kpis.scoreGlobal ?? "—"}
               </p>
+              {kpis.scoreGlobal !== null && (
+                <p style={{ margin: "2px 0 0", fontSize: 11, fontWeight: 700, color: kpis.classifGlobal.cor }}>
+                  {kpis.classifGlobal.label}
+                </p>
+              )}
             </Card>
           </div>
 
