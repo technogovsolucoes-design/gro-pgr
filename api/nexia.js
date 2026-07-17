@@ -49,10 +49,14 @@ export default async function handler(req, res) {
   if (!messages || !Array.isArray(messages) || messages.length === 0)
     return res.status(400).json({ erro: "Campo 'messages' é obrigatório." });
 
-  // Filtra apenas roles válidos e garante que a conversa começa com 'user'
-  const mensagensValidas = messages
+  // Filtra apenas roles válidos, remove msgs vazias e trunca em 20
+  const filtradas = messages
     .filter(m => ["user", "assistant"].includes(m.role) && typeof m.content === "string" && m.content.trim())
-    .slice(-20); // últimas 20 mensagens (janela de contexto)
+    .slice(-20);
+
+  // Anthropic exige que a conversa comece com 'user' — descarta assistants iniciais
+  const primeiroUser = filtradas.findIndex(m => m.role === "user");
+  const mensagensValidas = primeiroUser > 0 ? filtradas.slice(primeiroUser) : filtradas;
 
   if (mensagensValidas.length === 0)
     return res.status(400).json({ erro: "Nenhuma mensagem válida." });
