@@ -40,7 +40,8 @@ import MapaRiscos   from "./pages/seguranca/MapaRiscos";
 import GestaoEPC    from "./pages/seguranca/GestaoEPC";
 import OrdemServico from "./pages/seguranca/OrdemServico";
 import Ocorrencias  from "./pages/seguranca/Ocorrencias";
-import ChecklistSeg from "./pages/seguranca/ChecklistSeg";
+import ChecklistSeg    from "./pages/seguranca/ChecklistSeg";
+import EstresseTermico from "./pages/seguranca/EstresseTermico";
 
 // ── Previdenciário ─────────────────────────────────────────────────────────
 import Afastamentos from "./pages/previdenciario/Afastamentos";
@@ -89,7 +90,8 @@ const buildModules = (canManageUsers) => [
       { id:"treinamentos",  label:"Treinamentos" },
       { id:"os",            label:"Ordem de Serviço (NR-1)" },
       { id:"ocorrencias",   label:"Ocorrências" },
-      { id:"checklist",     label:"Checklist" },
+      { id:"checklist",       label:"Checklist" },
+      { id:"estressetermico", label:"Estresse Térmico — IBUTG" },
     ],
   },
   {
@@ -167,8 +169,9 @@ function renderPage(nav, navigate) {
       case "treinamentos": return <Treinamentos />;
       case "os":           return <OrdemServico />;
       case "ocorrencias":  return <Ocorrencias />;
-      case "checklist":    return <ChecklistSeg />;
-      default:             return <PGR />;
+      case "checklist":       return <ChecklistSeg />;
+      case "estressetermico": return <EstresseTermico />;
+      default:                return <PGR />;
     }
   }
 
