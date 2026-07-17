@@ -67,7 +67,7 @@ function RiscoBadge({ nivel }) {
 
 // ─── COMPONENTE PRINCIPAL ──────────────────────────────────────────────────
 export default function QuestionarioCOPSOQ() {
-  const { empresaAtiva, setores } = useApp();
+  const { empresaAtiva, setores, funcionarios } = useApp();
   const [tab, setTab] = useState("lista");
   const [questionarios, setQuestionarios] = useState([]);
   const [respostas, setRespostas] = useState([]);
@@ -129,6 +129,25 @@ export default function QuestionarioCOPSOQ() {
       const dimensoesConfig = buildDimensoesConfig(versao);
       const setoresIds = todosSetores ? setores.map((s) => s.id) : setoresSelecionados;
 
+      // Setores com nome — embutidos no doc público para acesso sem auth
+      const setoresInfo = setores
+        .filter((s) => setoresIds.length === 0 || setoresIds.includes(s.id))
+        .map((s) => ({ id: s.id, nome: s.nome }));
+
+      // Colaboradores dos setores selecionados — embutidos para dropdowns públicos
+      const colaboradoresInfo = funcionarios
+        .filter((f) => {
+          if (!f.funcionarioNome && !f.nome) return false;
+          return setoresIds.length === 0 || setoresIds.includes(f.setorId);
+        })
+        .map((f) => ({
+          id: f.id,
+          nome: f.funcionarioNome || f.nome || "",
+          cargo: f.cargo || "",
+          setorId: f.setorId || "",
+        }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
       const payload = {
         nome: nome.trim(),
         tipo: versao.nome,
@@ -136,12 +155,14 @@ export default function QuestionarioCOPSOQ() {
         itens,
         dimensoesConfig,
         setoresIds,
+        setoresInfo,        // [{id, nome}] — setores vinculados
+        colaboradoresInfo,  // [{id, nome, cargo, setorId}] — colaboradores para dropdown
         anonimato,
         prazo,
         canais: Object.keys(canais).filter((c) => canais[c]),
         status: "Aberto",
         criacao: serverTimestamp(),
-        totalFuncionarios: 0,
+        totalFuncionarios: colaboradoresInfo.length,
       };
 
       const ref = await addDoc(
@@ -469,6 +490,30 @@ export default function QuestionarioCOPSOQ() {
                 </div>
               )}
             </div>
+
+            {/* Preview de colaboradores vinculados */}
+            {(() => {
+              const ids = todosSetores ? setores.map(s => s.id) : setoresSelecionados;
+              const colab = funcionarios.filter(f =>
+                (f.funcionarioNome || f.nome) && (ids.length === 0 || ids.includes(f.setorId))
+              );
+              return colab.length > 0 ? (
+                <div style={{ marginBottom: 16, padding: "10px 14px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8 }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#15803d" }}>
+                    {colab.length} colaborador{colab.length !== 1 ? "es" : ""} vinculado{colab.length !== 1 ? "s" : ""} nos setores selecionados
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11, color: "#166534" }}>
+                    Serão carregados como lista de seleção na página de resposta, com filtro por setor.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8 }}>
+                  <p style={{ margin: 0, fontSize: 11, color: "#92400e" }}>
+                    Nenhum colaborador cadastrado nos setores selecionados. Cadastre-os em <strong>Configurações → Funcionários</strong> para habilitar os dropdowns na página de resposta.
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Anonimato */}
             <div style={{ marginBottom: 12 }}>

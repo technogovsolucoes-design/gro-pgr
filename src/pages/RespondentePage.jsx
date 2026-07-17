@@ -10,6 +10,43 @@ import { C } from "../constants";
 
 const ESCALA = ["Sempre", "Frequentemente", "Às vezes", "Raramente", "Nunca/Quase nunca"];
 
+// ─── Seletor de colaborador com busca inline ──────────────────────────────
+function ColaboradorSelector({ colaboradores, value, onChange, setorId }) {
+  const [busca, setBusca] = useState("");
+  const filtrados = colaboradores
+    .filter((c) => !setorId || c.setorId === setorId)
+    .filter((c) => !busca || c.nome.toLowerCase().includes(busca.toLowerCase()));
+
+  return (
+    <div>
+      <input
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        placeholder="Buscar colaborador..."
+        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: "inherit", marginBottom: 6, boxSizing: "border-box" }}
+      />
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        size={Math.min(filtrados.length + 1, 6)}
+        style={{ width: "100%", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: "inherit", padding: "4px 0", boxSizing: "border-box" }}
+      >
+        <option value="">— Selecione seu nome —</option>
+        {filtrados.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.nome}{c.cargo ? ` — ${c.cargo}` : ""}
+          </option>
+        ))}
+      </select>
+      {filtrados.length === 0 && busca && (
+        <p style={{ fontSize: 11, color: C.muted, margin: "4px 0 0" }}>
+          Nenhum resultado. Verifique se seu nome está cadastrado.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function EscalaRadio({ item, idx, valor, onChange }) {
   return (
     <div style={{ background: "#fff", border: `1px solid ${valor ? "#bfdbfe" : C.border}`, borderRadius: 10, padding: "14px 18px", marginBottom: 12, transition: "border-color 0.15s" }}>
@@ -33,15 +70,17 @@ function EscalaRadio({ item, idx, valor, onChange }) {
 }
 
 export default function RespondentePage({ questionarioId }) {
-  const [qConfig,    setQConfig]    = useState(null);
-  const [loading,    setLoading]    = useState(true);
-  const [erro,       setErro]       = useState("");
-  const [respostas,  setRespostas]  = useState({});
-  const [nome,       setNome]       = useState("");
-  const [setor,      setSetor]      = useState("");
-  const [submetendo, setSubmetendo] = useState(false);
-  const [enviado,    setEnviado]    = useState(false);
-  const [progresso,  setProgresso]  = useState(0);
+  const [qConfig,         setQConfig]         = useState(null);
+  const [loading,         setLoading]         = useState(true);
+  const [erro,            setErro]            = useState("");
+  const [respostas,       setRespostas]       = useState({});
+  // Identificação estruturada
+  const [setorId,         setSetorId]         = useState("");
+  const [colaboradorId,   setColaboradorId]   = useState("");
+  const [nomeDigitado,    setNomeDigitado]     = useState(""); // fallback quando sem lista
+  const [submetendo,      setSubmetendo]       = useState(false);
+  const [enviado,         setEnviado]          = useState(false);
+  const [progresso,       setProgresso]        = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -74,6 +113,25 @@ export default function RespondentePage({ questionarioId }) {
     setRespostas(prev => ({ ...prev, [idx]: valor }));
   }
 
+  // Dados derivados do qConfig
+  const setoresInfo      = qConfig?.setoresInfo      || [];
+  const colaboradoresInfo = qConfig?.colaboradoresInfo || [];
+  const temSetores       = setoresInfo.length > 0;
+  const temColaboradores = colaboradoresInfo.length > 0;
+
+  // Colaborador selecionado pelo dropdown
+  const colaboradorSelecionado = colaboradoresInfo.find((c) => c.id === colaboradorId);
+  // Nome final a persistir
+  const nomeIdentificacao = colaboradorSelecionado?.nome || nomeDigitado.trim() || null;
+  // Setor nome (do registro ou do dropdown)
+  const setorNome = setoresInfo.find((s) => s.id === setorId)?.nome || null;
+
+  // Resetar colaborador quando muda o setor
+  function handleSetorChange(id) {
+    setSetorId(id);
+    setColaboradorId("");
+  }
+
   async function submeter() {
     if (!qConfig) return;
     const total = qConfig.itens?.length || 0;
@@ -83,7 +141,11 @@ export default function RespondentePage({ questionarioId }) {
     if (respondidas < total) {
       if (!window.confirm(`Você respondeu ${respondidas} de ${total} questões.\n\nDeseja enviar mesmo assim?`)) return;
     }
-    if (!qConfig.anonimato && !nome.trim()) { alert("Informe seu nome para prosseguir."); return; }
+
+    // Validação de identificação para questionários não-anônimos
+    if (!qConfig.anonimato && !nomeIdentificacao) {
+      alert("Informe seu nome para prosseguir."); return;
+    }
 
     setSubmetendo(true);
     try {
@@ -91,15 +153,22 @@ export default function RespondentePage({ questionarioId }) {
         collection(db, "questionarios_publicos", questionarioId, "respostas"),
         {
           questionarioId,
-          empresaId:     qConfig.empresaId || null,
+          empresaId:       qConfig.empresaId || null,
           respostas,
-          totalItens:    total,
+          totalItens:      total,
           respondidas,
-          anonimato:     qConfig.anonimato,
-          identificacao: qConfig.anonimato ? null : nome.trim(),
-          setor:         setor.trim() || null,
-          dataResposta:  serverTimestamp(),
-          fonte:         "Link Público",
+          anonimato:       qConfig.anonimato,
+          // Identificação estruturada (vinculada ao cadastro)
+          colaboradorId:   qConfig.anonimato ? null : (colaboradorId || null),
+          colaboradorNome: qConfig.anonimato ? null : nomeIdentificacao,
+          cargo:           qConfig.anonimato ? null : (colaboradorSelecionado?.cargo || null),
+          setorId:         setorId || null,
+          setorNome:       setorNome || null,
+          // Campos legados (compatibilidade com RespostasPsico / ResultadosPsico)
+          identificacao:   qConfig.anonimato ? null : nomeIdentificacao,
+          setor:           setorNome || null,
+          dataResposta:    serverTimestamp(),
+          fonte:           "Link Público",
         }
       );
       setEnviado(true);
@@ -202,25 +271,56 @@ export default function RespondentePage({ questionarioId }) {
               </div>
             ))}
           </div>
+          {/* ── Setor ──────────────────────────────────────────────────── */}
+          <div style={{ marginTop: 16 }}>
+            <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>
+              Setor{!qConfig?.anonimato ? " *" : " (opcional)"}
+            </p>
+            {temSetores ? (
+              <select
+                value={setorId}
+                onChange={(e) => handleSetorChange(e.target.value)}
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", color: "#1e293b", background: "#fff" }}
+              >
+                <option value="">— Selecione seu setor —</option>
+                {setoresInfo.map((s) => (
+                  <option key={s.id} value={s.id}>{s.nome}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={setorId}
+                onChange={(e) => setSetorId(e.target.value)}
+                placeholder="Informe seu setor"
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }}
+              />
+            )}
+          </div>
+
+          {/* ── Identificação (não-anônimo) ─────────────────────────────── */}
           {!qConfig?.anonimato && (
-            <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Nome *</p>
-                <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Seu nome completo"
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Setor</p>
-                <input value={setor} onChange={e => setSetor(e.target.value)} placeholder="Seu setor"
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }} />
-              </div>
-            </div>
-          )}
-          {qConfig?.anonimato && (
             <div style={{ marginTop: 12 }}>
-              <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Setor (opcional)</p>
-              <input value={setor} onChange={e => setSetor(e.target.value)} placeholder="Informe seu setor se desejar"
-                style={{ width: 240, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: "inherit" }} />
+              <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Seu nome *</p>
+              {temColaboradores ? (
+                <ColaboradorSelector
+                  colaboradores={colaboradoresInfo}
+                  value={colaboradorId}
+                  onChange={setColaboradorId}
+                  setorId={setorId}
+                />
+              ) : (
+                <input
+                  value={nomeDigitado}
+                  onChange={(e) => setNomeDigitado(e.target.value)}
+                  placeholder="Seu nome completo"
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }}
+                />
+              )}
+              {colaboradorSelecionado?.cargo && (
+                <p style={{ fontSize: 11, color: "#0d2a5e", margin: "4px 0 0", fontWeight: 600 }}>
+                  Cargo: {colaboradorSelecionado.cargo}
+                </p>
+              )}
             </div>
           )}
         </div>

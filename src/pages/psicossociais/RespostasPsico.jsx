@@ -282,8 +282,9 @@ export default function RespostasPsico() {
                     <th style={{ padding: "10px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>#</th>
                     <th style={{ padding: "10px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>Data</th>
                     <th style={{ padding: "10px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>Setor</th>
-                    <th style={{ padding: "10px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>Identificação</th>
-                    <th style={{ padding: "10px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>Questões respondidas</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>Colaborador</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>Cargo</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>Questões</th>
                     <th style={{ padding: "10px 14px", textAlign: "left", color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>Fonte</th>
                   </tr>
                 </thead>
@@ -292,15 +293,20 @@ export default function RespostasPsico() {
                     const totalRespondidas = r.respostas ? Object.keys(r.respostas).length : 0;
                     const qObj = questionarios.find((q) => q.id === r.questionarioId);
                     const totalItens = qObj?.itens?.length || "?";
+                    const nomeExibido = r.colaboradorNome || r.identificacao || "—";
+                    const setorExibido = r.setorNome || getSetorNome(r.setorId);
                     return (
                       <tr key={r.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                         <td style={{ padding: "9px 14px", color: C.muted }}>{i + 1}</td>
                         <td style={{ padding: "9px 14px", color: C.text }}>{formatData(r.dataResposta)}</td>
                         <td style={{ padding: "9px 14px", color: C.text }}>
-                          {r.anonimato ? <span style={{ color: C.muted, fontStyle: "italic" }}>Anônimo</span> : getSetorNome(r.setorId)}
+                          {r.anonimato ? <span style={{ color: C.muted, fontStyle: "italic" }}>Anônimo</span> : setorExibido}
                         </td>
                         <td style={{ padding: "9px 14px", color: C.text }}>
-                          {r.anonimato ? <span style={{ color: C.muted, fontStyle: "italic" }}>Anônimo</span> : (r.identificacao || "—")}
+                          {r.anonimato ? <span style={{ color: C.muted, fontStyle: "italic" }}>Anônimo</span> : nomeExibido}
+                        </td>
+                        <td style={{ padding: "9px 14px", color: C.muted, fontSize: 11 }}>
+                          {r.anonimato ? "—" : (r.cargo || "—")}
                         </td>
                         <td style={{ padding: "9px 14px" }}>
                           <span style={{ color: totalRespondidas === totalItens ? C.green : C.amber }}>
