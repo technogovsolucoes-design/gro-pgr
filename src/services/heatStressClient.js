@@ -71,6 +71,31 @@ export async function calcularEstresseTermico(input) {
 }
 
 /**
+ * Obtém endereço completo a partir de coordenadas (Nominatim / OpenStreetMap).
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {Promise<{ display: string, logradouro: string, municipio: string, uf: string, cep: string } | null>}
+ */
+export async function obterEndereco(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=pt-BR`,
+      { headers: { "User-Agent": "NEXUS-SST/1.0" } }
+    );
+    if (!res.ok) return null;
+    const d = await res.json();
+    const a = d.address || {};
+    const logradouro = [a.road, a.house_number].filter(Boolean).join(", ") || a.suburb || "";
+    const municipio  = a.city || a.town || a.village || a.municipality || "";
+    const uf         = a.state || "";
+    const cep        = a.postcode || "";
+    return { display: d.display_name || "", logradouro, municipio, uf, cep };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Obtém coordenadas do dispositivo via Geolocation API.
  * @returns {Promise<{ latitude: number, longitude: number }>}
  */

@@ -9,6 +9,7 @@ import { Btn, Card, SectionTitle } from "../../components/ui";
 import {
   calcularEstresseTermico,
   obterLocalizacao,
+  obterEndereco,
   ATIVIDADES_METABOLICAS,
   CORES_RISCO,
 } from "../../services/heatStressClient";
@@ -93,6 +94,7 @@ export default function EstresseTermico() {
 
   // ── State ──
   const [resultado,  setResultado]  = useState(null);
+  const [endereco,   setEndereco]   = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [geoLoad,    setGeoLoad]    = useState(false);
   const [erro,       setErro]       = useState("");
@@ -106,6 +108,7 @@ export default function EstresseTermico() {
       const { latitude, longitude } = await obterLocalizacao();
       setLat(latitude.toFixed(6));
       setLon(longitude.toFixed(6));
+      obterEndereco(latitude, longitude).then(setEndereco);
     } catch (e) {
       setErro(e.message);
     } finally {
@@ -138,6 +141,7 @@ export default function EstresseTermico() {
 
       const dto = await calcularEstresseTermico(input);
       setResultado(dto);
+      if (!endereco && lat && lon) obterEndereco(parseFloat(lat), parseFloat(lon)).then(setEndereco);
     } catch (e) {
       setErro(e.message);
     } finally {
@@ -348,6 +352,31 @@ export default function EstresseTermico() {
                     </p>
                   </div>
                 )}
+              </Card>
+
+              {/* ── Local da avaliação (para laudo) ── */}
+              <Card style={{ marginTop: 12, background: "#f8fafc" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                  <MapPin size={14} color={C.navyMid} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 11, color: C.muted, margin: "0 0 2px", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Local da Avaliação</p>
+                    {endereco ? (
+                      <>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: C.navy, margin: "0 0 2px" }}>
+                          {endereco.logradouro || endereco.display.split(",")[0]}
+                          {endereco.municipio ? ` — ${endereco.municipio}/${endereco.uf}` : ""}
+                          {endereco.cep ? ` — CEP ${endereco.cep}` : ""}
+                        </p>
+                        <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{endereco.display}</p>
+                      </>
+                    ) : (
+                      <p style={{ fontSize: 12, color: C.muted, margin: 0, fontStyle: "italic" }}>Use o botão GPS para obter o endereço automaticamente</p>
+                    )}
+                    <p style={{ fontSize: 11, color: C.muted, margin: "4px 0 0" }}>
+                      Coordenadas: {lat}, {lon} · Avaliado em: {new Date(resultado.dataCalculo).toLocaleString("pt-BR")}
+                    </p>
+                  </div>
+                </div>
               </Card>
 
               {/* ── Condições climáticas ── */}

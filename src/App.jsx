@@ -55,8 +55,9 @@ import PainelContador from "./pages/esocial/PainelContador";
 // ── IA ─────────────────────────────────────────────────────────────────────
 import AssistenteIA from "./pages/ia/AssistenteIA";
 
-// ── Página pública (sem auth) ──────────────────────────────────────────────
+// ── Páginas públicas (sem auth) ────────────────────────────────────────────
 import RespondentePage from "./pages/RespondentePage";
+import IbutgPublico    from "./pages/IbutgPublico";
 
 // ── Psicossociais COPSOQ ───────────────────────────────────────────────────
 import QuestionarioCOPSOQ from "./pages/psicossociais/QuestionarioCOPSOQ";
@@ -279,9 +280,10 @@ function Sidebar({ nav, navigate, modules }) {
 
 // ── App Shell ──────────────────────────────────────────────────────────────
 export default function App() {
-  // Rota pública /responder/:id — intercepta ANTES do fluxo de auth
+  // Rotas públicas — interceptam ANTES do fluxo de auth
   const m = window.location.pathname.match(/^\/responder\/([^/]+)/);
   if (m) return <RespondentePage questionarioId={m[1]} />;
+  if (window.location.pathname.startsWith("/ibutg")) return <IbutgPublico />;
 
   return <AppProvider><AppContent /></AppProvider>;
 }
