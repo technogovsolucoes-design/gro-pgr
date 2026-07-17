@@ -78,7 +78,7 @@ function Badge({ label, color, bg }) {
 }
 
 // ── Componente principal ─────────────────────────────────────────────────────
-export default function GestaoEPI() {
+export default function GestaoEPI({ defaultTab = 0 }) {
   const {
     setores, epis, funcionarios, entregas,
     salvarEpi, excluirEpi,
@@ -86,7 +86,7 @@ export default function GestaoEPI() {
     registrarEntrega, excluirEntrega,
   } = useApp();
 
-  const [aba, setAba] = useState(0);
+  const [aba, setAba] = useState(defaultTab);
 
   // EPI modal
   const [epiModal, setEpiModal]   = useState(false);

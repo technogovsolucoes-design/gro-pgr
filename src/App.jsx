@@ -131,10 +131,11 @@ const buildModules = (canManageUsers) => [
   {
     id:"config",      label:"Configurações",          icon:Settings,    color:C.gray,
     items:[
-      { id:"empresa",     label:"Dados da Empresa" },
-      { id:"setores",     label:"Setores" },
-      { id:"indicadores", label:"Indicadores / FAP" },
-      { id:"historico",   label:"Histórico de Avaliações" },
+      { id:"empresa",       label:"Dados da Empresa" },
+      { id:"setores",       label:"Setores" },
+      { id:"funcionarios",  label:"Funcionários" },
+      { id:"indicadores",   label:"Indicadores / FAP" },
+      { id:"historico",     label:"Histórico de Avaliações" },
       ...(canManageUsers ? [{ id:"usuarios", label:"Usuários" }] : []),
     ],
   },
@@ -208,11 +209,12 @@ function renderPage(nav, navigate) {
 
   if (mod === "config") {
     switch (page) {
-      case "setores":     return <Setores />;
-      case "indicadores": return <Indicadores />;
-      case "historico":   return <Historico />;
-      case "usuarios":    return <Usuarios />;
-      default:            return <Empresa />;
+      case "setores":      return <Setores />;
+      case "funcionarios": return <GestaoEPI defaultTab={1} />;
+      case "indicadores":  return <Indicadores />;
+      case "historico":    return <Historico />;
+      case "usuarios":     return <Usuarios />;
+      default:             return <Empresa />;
     }
   }
 
