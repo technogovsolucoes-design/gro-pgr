@@ -5,7 +5,7 @@ import { C } from "../../constants";
 
 const BOAS_VINDAS = {
   role: "assistant",
-  content: "Olá! Sou o Gaudêncio, seu assistente de IA para Saúde e Segurança do Trabalho. Posso ajudar com interpretação de exames, análise de riscos, discussão do PCMSO e muito mais. Como posso ajudar hoje?",
+  content: "Olá! Sou a NEXIA, assistente de IA do sistema NEXUS SST. Posso ajudar com interpretação de exames, análise de riscos, discussão do PCMSO e muito mais. Como posso ajudar hoje?",
   ts: new Date(),
 };
 
@@ -71,7 +71,7 @@ export default function AssistenteIA() {
         <div style={{ padding:"16px 14px", borderBottom:"1px solid rgba(255,255,255,0.1)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
             <Brain size={18} color="#fff"/>
-            <p style={{ fontWeight:800, fontSize:13, color:"#fff", margin:0 }}>Gaudêncio</p>
+            <p style={{ fontWeight:800, fontSize:13, color:"#fff", margin:0 }}>NEXIA</p>
           </div>
           <button onClick={novaConversa}
             style={{ width:"100%", padding:"8px 12px", borderRadius:8, border:"1px solid rgba(255,255,255,0.3)", background:"rgba(255,255,255,0.1)", color:"#fff", cursor:"pointer", fontSize:11, fontWeight:600, fontFamily:"inherit" }}>

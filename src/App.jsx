@@ -120,7 +120,7 @@ const buildModules = (canManageUsers) => [
   {
     id:"ia",          label:"Gestão com IA",          icon:Sparkles,    color:"#2563eb",
     items:[
-      { id:"gaudencio", label:"Gaudêncio — Assistente IA" },
+      { id:"gaudencio", label:"NEXIA — Assistente de IA" },
     ],
   },
   {
