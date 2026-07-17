@@ -46,7 +46,7 @@ export default function Levantamento({ onNavigate }) {
       {!setorSel && (
         <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:8, padding:"12px 16px", fontSize:12, color:"#92400e" }}>
           {setores.length === 0
-            ? <>Nenhum setor cadastrado. <button onClick={() => onNavigate(2)} style={{ background:"none", border:"none", color:C.navyMid, cursor:"pointer", fontWeight:600, fontFamily:"inherit", fontSize:12 }}>Cadastre setores primeiro.</button></>
+            ? <>Nenhum setor cadastrado. <button onClick={() => onNavigate("config", "setores")} style={{ background:"none", border:"none", color:C.navyMid, cursor:"pointer", fontWeight:600, fontFamily:"inherit", fontSize:12 }}>Cadastre setores primeiro.</button></>
             : "Selecione um setor acima para iniciar o levantamento epidemiológico."
           }
         </div>

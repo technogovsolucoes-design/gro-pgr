@@ -26,7 +26,7 @@ export default function Matriz({ onNavigate }) {
       {riscos.length === 0 ? (
         <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:8, padding:"20px", fontSize:12, color:"#92400e", textAlign:"center" }}>
           Sem dados de risco. Preencha o{" "}
-          <button onClick={() => onNavigate(3)} style={{ background:"none", border:"none", color:C.navyMid, cursor:"pointer", fontWeight:600, fontFamily:"inherit", fontSize:12 }}>Levantamento</button>{" "}
+          <button onClick={() => onNavigate("seguranca", "levantamento")} style={{ background:"none", border:"none", color:C.navyMid, cursor:"pointer", fontWeight:600, fontFamily:"inherit", fontSize:12 }}>Levantamento</button>{" "}
           primeiro.
         </div>
       ) : (
