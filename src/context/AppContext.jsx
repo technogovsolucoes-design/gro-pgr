@@ -278,7 +278,12 @@ export function AppProvider({ children }) {
   // ── Checklist actions ──
   const setCheckField = (fatorId, setorId, field, val) => {
     const key = `${fatorId}__${setorId}`;
-    const updated = { ...(checklist[key] || {}), [field]: val };
+    const current = checklist[key] || {};
+    const updated = { ...current, [field]: val };
+    // Auto-default severity to "Moderado" when freq is set (and not "Nunca") and sev was never chosen
+    if (field === "freq" && val !== "Nunca" && !current.sev) {
+      updated.sev = "Moderado";
+    }
     setChecklist(p => ({ ...p, [key]: updated }));
     setSavingCheck(true);
     setDoc(doc(db, "empresas", empresaAtiva.id, "checklist", key), updated)
@@ -431,16 +436,17 @@ export function AppProvider({ children }) {
     const r = [];
     Object.entries(checklist).forEach(([key, val]) => {
       const [fid, sid] = key.split("__");
-      if (!val?.freq || !val?.sev) return;
+      if (!val?.freq || val.freq === "Nunca") return;
       const fator = FATORES.find(f => f.id === fid);
       const setor = setores.find(s => s.id === sid);
       if (!fator || !setor) return;
-      const score = getRiskScore(val.freq, val.sev);
+      const sev = val.sev || "Moderado"; // padrão se não preenchido
+      const score = getRiskScore(val.freq, sev);
       const rk = getRiskLabel(score);
       r.push({
         fator: fator.label, cat: fator.cat,
         setor: setor.nome, setorId: sid,
-        freq: val.freq, sev: val.sev,
+        freq: val.freq, sev,
         score, ...rk, aet: score >= 13,
       });
     });
