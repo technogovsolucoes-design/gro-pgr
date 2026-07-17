@@ -62,17 +62,25 @@ export default function AssistenteIA() {
         body:    JSON.stringify({ messages: apiMessages }),
       });
 
-      const data = await res.json();
+      // Tenta parsear JSON — se falhar (ex: HTML de erro do Vercel), trata como erro
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        setErroApi(`Erro ${res.status}: a NEXIA retornou resposta inesperada. Verifique as variáveis de ambiente no Vercel (ANTHROPIC_API_KEY).`);
+        setMensagens(prev => prev.filter(m => m !== msgUser));
+        return;
+      }
 
       if (!res.ok) {
-        setErroApi(data.erro || "Erro ao conectar com a NEXIA.");
-        setMensagens(prev => prev.filter(m => m !== msgUser)); // remove msg do user se falhou
+        setErroApi(data.erro || `Erro ${res.status} ao conectar com a NEXIA.`);
+        setMensagens(prev => prev.filter(m => m !== msgUser));
         return;
       }
 
       setMensagens(prev => [...prev, { role: "assistant", content: data.content, ts: new Date() }]);
-    } catch {
-      setErroApi("Erro de conexão. Verifique sua internet e tente novamente.");
+    } catch (err) {
+      setErroApi("Erro de conexão com a NEXIA: " + (err?.message || "tente novamente."));
     } finally {
       setEnviando(false);
     }

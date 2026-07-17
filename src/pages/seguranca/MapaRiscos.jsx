@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import { useState, useEffect, useMemo } from "react";
+import { collection, onSnapshot, addDoc, deleteDoc, doc, query, orderBy, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebase";
 import { useApp } from "../../context/AppContext";
 import { Btn, Card, Input } from "../../components/ui";
-import { C } from "../../constants";
-import { Map, Plus, Trash2, X } from "lucide-react";
+import { C, FATORES } from "../../constants";
+import { getRiskScore } from "../../utils";
+import { Map, Plus, X } from "lucide-react";
 
 const TIPOS_RISCO = [
   { label:"Físico",             color:"#1d4ed8", bg:"#dbeafe" },
@@ -61,19 +62,67 @@ function Textarea({ label, value, onChange, rows = 3, placeholder }) {
 
 const VAZIO = { setorId:"", tipoRisco:"", descricao:"", magnitude:"Médio", medidas:"" };
 
+// Converte score de risco para magnitude do Mapa de Riscos
+function scoreToMagnitude(score) {
+  if (score >= 9) return "Grande";
+  if (score >= 4) return "Médio";
+  return "Pequeno";
+}
+
 export default function MapaRiscos() {
   const { empresaAtiva, setores } = useApp();
-  const [riscos, setRiscos] = useState([]);
+  const [riscos,    setRiscos]    = useState([]);
+  const [checklist, setChecklist] = useState({});
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(VAZIO);
   const [filtroSetor, setFiltroSetor] = useState("");
 
+  // Listener: riscos manuais
   useEffect(() => {
     if (!empresaAtiva) return;
     const q = query(collection(db, "empresas", empresaAtiva.id, "mapa_riscos"), orderBy("tipoRisco"));
-    const unsub = onSnapshot(q, snap => setRiscos(snap.docs.map(d => ({ id:d.id, ...d.data() }))));
-    return unsub;
+    return onSnapshot(q, snap => setRiscos(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, [empresaAtiva]);
+
+  // Listener: checklist do Levantamento Psicossocial
+  useEffect(() => {
+    if (!empresaAtiva) return;
+    return onSnapshot(
+      collection(db, "empresas", empresaAtiva.id, "checklist"),
+      snap => {
+        const data = {};
+        snap.docs.forEach(d => { data[d.id] = d.data(); });
+        setChecklist(data);
+      }
+    );
+  }, [empresaAtiva]);
+
+  // Derivar riscos psicossociais do checklist (somente freq ≠ "Nunca")
+  const riscosLevantamento = useMemo(() => {
+    const result = [];
+    Object.entries(checklist).forEach(([key, val]) => {
+      if (!val.freq || !val.sev || val.freq === "Nunca") return;
+      const [fatorId, setorId] = key.split("__");
+      const fator = FATORES.find(f => f.id === fatorId);
+      if (!fator) return;
+      const score = getRiskScore(val.freq, val.sev);
+      result.push({
+        id: `lev__${key}`,
+        setorId,
+        tipoRisco: "Psicossocial",
+        descricao: fator.label,
+        magnitude: scoreToMagnitude(score),
+        fromLevantamento: true,
+      });
+    });
+    return result;
+  }, [checklist]);
+
+  // Merge: riscos manuais + levantamento (sem duplicar)
+  const todosRiscos = useMemo(() => {
+    const mapaIds = new Set(riscosLevantamento.map(r => r.id));
+    return [...riscos, ...riscosLevantamento];
+  }, [riscos, riscosLevantamento]);
 
   async function salvar() {
     if (!form.setorId || !form.tipoRisco || !form.descricao) return;
@@ -144,7 +193,7 @@ export default function MapaRiscos() {
             </thead>
             <tbody>
               {setoresFiltrados.map((setor, si) => {
-                const riscosDosetor = riscos.filter(r => r.setorId === setor.id);
+                const riscosDosetor = todosRiscos.filter(r => r.setorId === setor.id);
                 return (
                   <tr key={setor.id} style={{ background: si % 2 === 0 ? C.white : C.bg }}>
                     <td style={{ padding:"10px 12px", fontWeight:600, fontSize:12, color:C.navy, border:`1px solid ${C.border}` }}>
@@ -161,13 +210,17 @@ export default function MapaRiscos() {
                               {items.map(item => {
                                 const mc = MAG_CORES[item.magnitude] || MAG_CORES["Médio"];
                                 return (
-                                  <div key={item.id} style={{ background:t.bg, borderRadius:6, padding:"4px 6px", border:`1px solid ${t.color}30`, position:"relative" }}>
-                                    <p style={{ margin:0, fontSize:10, fontWeight:600, color:t.color }}>{item.descricao}</p>
+                                  <div key={item.id} style={{ background: item.fromLevantamento ? "#f3e8ff" : t.bg, borderRadius:6, padding:"4px 6px", border:`1px solid ${item.fromLevantamento ? "#c084fc" : t.color}30`, position:"relative" }}>
+                                    <p style={{ margin:0, fontSize:10, fontWeight:600, color: item.fromLevantamento ? "#7e22ce" : t.color }}>{item.descricao}</p>
                                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:2 }}>
                                       <span style={{ fontSize:9, fontWeight:700, color:mc.color, background:mc.bg, borderRadius:4, padding:"1px 5px" }}>{item.magnitude}</span>
-                                      <button onClick={() => excluir(item.id)} style={{ background:"none", border:"none", cursor:"pointer", padding:0, lineHeight:1 }}>
-                                        <X size={10} color={C.muted} />
-                                      </button>
+                                      {item.fromLevantamento ? (
+                                        <span style={{ fontSize:8, color:"#7e22ce", fontWeight:700, opacity:0.8 }}>Levantamento</span>
+                                      ) : (
+                                        <button onClick={() => excluir(item.id)} style={{ background:"none", border:"none", cursor:"pointer", padding:0, lineHeight:1 }}>
+                                          <X size={10} color={C.muted} />
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 );
