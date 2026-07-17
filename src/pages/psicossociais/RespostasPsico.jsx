@@ -3,6 +3,7 @@ import {
   collection, onSnapshot, addDoc,
   doc, query, orderBy, serverTimestamp,
 } from "firebase/firestore";
+
 import { db } from "../../firebase";
 import { useApp } from "../../context/AppContext";
 import { Btn, Card, Input } from "../../components/ui";
@@ -47,7 +48,8 @@ export default function RespostasPsico() {
   const { empresaAtiva, setores } = useApp();
   const [tab, setTab] = useState("recebidas");
   const [questionarios, setQuestionarios] = useState([]);
-  const [respostas, setRespostas] = useState([]);
+  const [respostas,         setRespostas]         = useState([]);
+  const [respostasPublicas, setRespostasPublicas] = useState([]);
 
   // Filtros
   const [qFiltro, setQFiltro] = useState("");
@@ -80,9 +82,18 @@ export default function RespostasPsico() {
       orderBy("dataResposta", "desc")
     );
     return onSnapshot(q, (snap) =>
-      setRespostas(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      setRespostas(snap.docs.map((d) => ({ id: d.id, ...d.data(), fonte: d.data().fonte || "Manual" })))
     );
   }, [empresaId]);
+
+  // Listener para respostas recebidas via link público
+  useEffect(() => {
+    if (!qFiltro) { setRespostasPublicas([]); return; }
+    return onSnapshot(
+      collection(db, "questionarios_publicos", qFiltro, "respostas"),
+      snap => setRespostasPublicas(snap.docs.map(d => ({ id: d.id, ...d.data(), fonte: "Link Público" })))
+    );
+  }, [qFiltro]);
 
   // ─── Dados derivados ─────────────────────────────────────────────────
   const questionarioSelecionadoObj = useMemo(
@@ -91,9 +102,18 @@ export default function RespostasPsico() {
   );
 
   const respostasFiltradas = useMemo(() => {
-    if (!qFiltro) return respostas;
-    return respostas.filter((r) => r.questionarioId === qFiltro);
-  }, [respostas, qFiltro]);
+    const manuais = qFiltro
+      ? respostas.filter(r => r.questionarioId === qFiltro)
+      : respostas;
+    // Deduplica por ID (segurança caso uma resposta apareça nos dois listeners)
+    const mapa = {};
+    [...manuais, ...respostasPublicas].forEach(r => { mapa[r.id] = r; });
+    return Object.values(mapa).sort((a, b) => {
+      const da = a.dataResposta?.toDate?.() ?? new Date(0);
+      const db_ = b.dataResposta?.toDate?.() ?? new Date(0);
+      return db_ - da;
+    });
+  }, [respostas, respostasPublicas, qFiltro]);
 
   const questionarioFiltroObj = useMemo(
     () => questionarios.find((q) => q.id === qFiltro),

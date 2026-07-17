@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Dados de empresa — requer autenticação ────────────────────────────
+    match /empresas/{empresaId}/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // ── Perfis de usuário ─────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // ── Questionários públicos (COPSOQ) ───────────────────────────────────
+    // Config: leitura pública (link de resposta), escrita só autenticado
+    match /questionarios_publicos/{questionarioId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+
+      // Respostas: qualquer pessoa pode enviar, só autenticado pode ler
+      match /respostas/{respostaId} {
+        allow create: if true;
+        allow read:   if request.auth != null;
+        allow update, delete: if false;
+      }
+    }
+  }
+}

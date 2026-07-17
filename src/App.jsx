@@ -55,6 +55,9 @@ import PainelContador from "./pages/esocial/PainelContador";
 // ── IA ─────────────────────────────────────────────────────────────────────
 import AssistenteIA from "./pages/ia/AssistenteIA";
 
+// ── Página pública (sem auth) ──────────────────────────────────────────────
+import RespondentePage from "./pages/RespondentePage";
+
 // ── Psicossociais COPSOQ ───────────────────────────────────────────────────
 import QuestionarioCOPSOQ from "./pages/psicossociais/QuestionarioCOPSOQ";
 import RespostasPsico     from "./pages/psicossociais/RespostasPsico";
@@ -274,6 +277,10 @@ function Sidebar({ nav, navigate, modules }) {
 
 // ── App Shell ──────────────────────────────────────────────────────────────
 export default function App() {
+  // Rota pública /responder/:id — intercepta ANTES do fluxo de auth
+  const m = window.location.pathname.match(/^\/responder\/([^/]+)/);
+  if (m) return <RespondentePage questionarioId={m[1]} />;
+
   return <AppProvider><AppContent /></AppProvider>;
 }
 

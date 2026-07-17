@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc,
-  doc, query, orderBy, serverTimestamp,
+  doc, query, orderBy, serverTimestamp, setDoc,
 } from "firebase/firestore";
 import { db } from "../../firebase";
 import { useApp } from "../../context/AppContext";
@@ -178,23 +178,32 @@ export default function QuestionarioCOPSOQ() {
       const setoresIds = todosSetores ? setores.map((s) => s.id) : setoresSelecionados;
       const totalFuncionarios = 0; // a ser preenchido conforme integração
 
+      const payload = {
+        nome: nome.trim(),
+        tipo,
+        itens,
+        setoresIds,
+        anonimato,
+        prazo,
+        canais: Object.keys(canais).filter((c) => canais[c]),
+        status: "Aberto",
+        criacao: serverTimestamp(),
+        totalFuncionarios,
+      };
+
       const ref = await addDoc(
         collection(db, "empresas", empresaId, "questionarios_config"),
-        {
-          nome: nome.trim(),
-          tipo,
-          itens,
-          setoresIds,
-          anonimato,
-          prazo,
-          canais: Object.keys(canais).filter((c) => canais[c]),
-          status: "Aberto",
-          criacao: serverTimestamp(),
-          totalFuncionarios,
-        }
+        payload
       );
 
-      setLinkGerado(`nexus-sst.app/responder/${ref.id}`);
+      // Escreve cópia pública para que /responder/:id funcione sem auth
+      await setDoc(doc(db, "questionarios_publicos", ref.id), {
+        ...payload,
+        empresaId,
+      });
+
+      const appUrl = window.location.origin;
+      setLinkGerado(`${appUrl}/responder/${ref.id}`);
       // reset
       setNome("");
       setTipo(TIPOS[0]);
@@ -340,7 +349,7 @@ export default function QuestionarioCOPSOQ() {
                       </div>
                       {/* Ações */}
                       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                        <Btn small outline color={C.navyMid} onClick={() => navigator.clipboard?.writeText(`nexus-sst.app/responder/${q.id}`)}>
+                        <Btn small outline color={C.navyMid} onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/responder/${q.id}`)}>
                           Ver Link
                         </Btn>
                         {aberto && (

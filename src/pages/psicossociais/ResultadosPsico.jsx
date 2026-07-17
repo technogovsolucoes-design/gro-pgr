@@ -55,9 +55,10 @@ const selectStyle = {
 
 export default function ResultadosPsico() {
   const { empresaAtiva, setores } = useApp();
-  const [questionarios, setQuestionarios] = useState([]);
-  const [respostas, setRespostas] = useState([]);
-  const [qSelecionado, setQSelecionado] = useState("");
+  const [questionarios,     setQuestionarios]     = useState([]);
+  const [respostas,         setRespostas]         = useState([]);
+  const [respostasPublicas, setRespostasPublicas] = useState([]);
+  const [qSelecionado,      setQSelecionado]      = useState("");
 
   const empresaId = empresaAtiva?.id;
 
@@ -86,16 +87,27 @@ export default function ResultadosPsico() {
     );
   }, [empresaId]);
 
+  // Respostas recebidas via link público
+  useEffect(() => {
+    if (!qSelecionado) { setRespostasPublicas([]); return; }
+    return onSnapshot(
+      collection(db, "questionarios_publicos", qSelecionado, "respostas"),
+      snap => setRespostasPublicas(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+  }, [qSelecionado]);
+
   // ─── Dados filtrados ─────────────────────────────────────────────────
   const questionarioObj = useMemo(
     () => questionarios.find((q) => q.id === qSelecionado),
     [questionarios, qSelecionado]
   );
 
-  const respostasFiltradas = useMemo(
-    () => respostas.filter((r) => r.questionarioId === qSelecionado),
-    [respostas, qSelecionado]
-  );
+  const respostasFiltradas = useMemo(() => {
+    const manuais = respostas.filter(r => r.questionarioId === qSelecionado);
+    const mapa = {};
+    [...manuais, ...respostasPublicas].forEach(r => { mapa[r.id] = r; });
+    return Object.values(mapa);
+  }, [respostas, respostasPublicas, qSelecionado]);
 
   // ─── Scores por dimensão ─────────────────────────────────────────────
   const scoresDimensao = useMemo(() => {
