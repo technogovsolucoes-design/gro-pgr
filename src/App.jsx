@@ -327,7 +327,7 @@ function AppContent() {
       <div style={{ background:"#eff6ff", borderBottom:`1px solid #bfdbfe`, padding:"4px 16px", display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
         <Info size={11} color="#1d4ed8" style={{ flexShrink:0 }}/>
         <p style={{ fontSize:10, color:"#1e40af", margin:0 }}>
-          Riscos psicossociais <strong>não devem ser enviados na S-2240</strong> · São essenciais para contestação de NTEP · NR-01 (2022) · ISO 45003:2021
+          Plataforma NEXUS SST — <strong>Medicina · Segurança · Previdenciário · eSocial · IA · Psicossociais</strong> · NR-01 (2022) · NR-09 · NR-15 · NR-17 · PCMSO · PGR/GRO · FAP/NTEP · ISO 45003:2021
         </p>
       </div>
 

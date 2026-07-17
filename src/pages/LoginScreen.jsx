@@ -25,8 +25,25 @@ export default function LoginScreen() {
               NEX<span style={{ color:"#38b249" }}>US</span>
             </p>
             <p style={{ fontSize:11, color:C.muted, margin:"2px 0 0", letterSpacing:"0.5px", textTransform:"uppercase" }}>
-              Gestão de Riscos Psicossociais
+              Plataforma Integrada de Gestão SST
             </p>
+          </div>
+
+          {/* Módulos highlight */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:5, marginTop:14, width:"100%" }}>
+            {[
+              { label:"Medicina do Trabalho", sub:"PCMSO · ASO · Audiometria" },
+              { label:"Segurança do Trabalho", sub:"PGR/GRO · LTCAT · EPIs" },
+              { label:"Previdenciário", sub:"PPP · CAT · FAP/NTEP" },
+              { label:"eSocial SST", sub:"S-2210 · S-2220 · S-2240" },
+              { label:"IA — NEXIA", sub:"Análise inteligente SST" },
+              { label:"Psicossociais", sub:"COPSOQ II · NR-01" },
+            ].map(f => (
+              <div key={f.label} style={{ background:"#f0f9ff", border:"1px solid #bfdbfe", borderRadius:6, padding:"5px 7px", textAlign:"center" }}>
+                <p style={{ fontSize:8.5, fontWeight:700, color:"#1652a1", margin:"0 0 1px", lineHeight:1.3 }}>{f.label}</p>
+                <p style={{ fontSize:7.5, color:C.muted, margin:0, lineHeight:1.3 }}>{f.sub}</p>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -67,7 +84,7 @@ export default function LoginScreen() {
       {/* Rodapé */}
       <div style={{ textAlign:"center" }}>
         <p style={{ fontSize:11, color:"rgba(255,255,255,0.5)", margin:0 }}>
-          NR-01 · NR-17 · ISO 45003 · eSocial · FAP/NTEP
+          PCMSO · PGR/GRO · eSocial SST · FAP/NTEP · NR-01 · NR-09 · NR-15 · NR-17 · ISO 45003
         </p>
         <p style={{ fontSize:10, color:"rgba(255,255,255,0.35)", margin:"4px 0 0" }}>
           Desenvolvido por <span style={{ color:"rgba(255,255,255,0.6)", fontWeight:600 }}>Technogov Soluções</span>

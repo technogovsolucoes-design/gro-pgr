@@ -95,9 +95,9 @@ export default function EmpresaSelector() {
         <div style={{ flex:1 }}>
           <p style={{ color:"#fff", fontWeight:800, fontSize:15, margin:0, letterSpacing:"-0.3px" }}>
             NEX<span style={{ color:"#38b249" }}>US</span>
-            <span style={{ fontWeight:400, fontSize:11, color:"rgba(255,255,255,0.6)", marginLeft:10 }}>Gestão de Riscos Psicossociais</span>
+            <span style={{ fontWeight:400, fontSize:11, color:"rgba(255,255,255,0.6)", marginLeft:10 }}>Plataforma Integrada de Gestão SST</span>
           </p>
-          <p style={{ color:"rgba(255,255,255,0.5)", fontSize:9.5, margin:0 }}>NR-01 · NR-17 · ISO 45003 · eSocial · FAP/NTEP · Technogov Soluções</p>
+          <p style={{ color:"rgba(255,255,255,0.5)", fontSize:9.5, margin:0 }}>PCMSO · PGR/GRO · eSocial SST · FAP/NTEP · NR-01 · NR-09 · NR-15 · NR-17 · ISO 45003 · Technogov Soluções</p>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ width:30, height:30, borderRadius:"50%", background:"#3a6aa8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:"#fff" }}>{avatarInicial}</div>
