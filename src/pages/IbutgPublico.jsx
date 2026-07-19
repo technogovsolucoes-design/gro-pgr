@@ -2,7 +2,9 @@
  * Página pública mobile de cálculo IBUTG — /ibutg
  * Sem autenticação. Layout otimizado para celular + geração de laudo pericial.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { NexusLogo } from "../assets/NexusLogo";
 import {
   calcularEstresseTermico,
@@ -11,6 +13,7 @@ import {
   ATIVIDADES_METABOLICAS,
   CORES_RISCO,
 } from "../services/heatStressClient";
+import { gerarLaudoIBUTG } from "../services/laudoIbutg";
 
 const C = {
   navy:    "#0d2a5e",
@@ -36,142 +39,8 @@ const card = (extra = {}) => ({
 const label = { fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, display: "block", textTransform: "uppercase", letterSpacing: 0.4 };
 const inputStyle = { width: "100%", padding: "11px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 15, fontFamily: "inherit", boxSizing: "border-box", color: "#1e293b" };
 
-// ── Gerar laudo HTML para impressão ─────────────────────────────────────────
-function gerarLaudo(resultado, endereco, lat, lon, metab, atividadeLabel, outdoor) {
-  const data = new Date(resultado.dataCalculo).toLocaleString("pt-BR");
-  const localStr = endereco
-    ? `${endereco.logradouro || ""}${endereco.municipio ? ` — ${endereco.municipio}/${endereco.uf}` : ""}${endereco.cep ? ` — CEP ${endereco.cep}` : ""}`
-    : `Coordenadas: ${lat}, ${lon}`;
-  const endFull = endereco?.display || `Lat: ${lat}, Lon: ${lon}`;
-
-  const coresMap = { Aceitável: "#16a34a", Atenção: "#ca8a04", Crítico: "#dc2626", Proibido: "#7c3aed" };
-  const cor = coresMap[resultado.nivelRisco] || "#1e293b";
-
-  const esocial = resultado.requerRegistroESocial
-    ? `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:10px 14px;margin:12px 0">
-        <strong style="color:#991b1b">⚠ Registro eSocial obrigatório:</strong>
-        <span style="color:#991b1b"> Evento S-2220 (Monitoramento da Saúde) — limite excedido em ${(resultado.ibutgValue - resultado.limiteNHO06).toFixed(1)}°C. Conforme NR-09 §9.3.5.4.</span>
-       </div>`
-    : "";
-
-  const formula = outdoor
-    ? `IBUTG = 0,7 × Tbn + 0,2 × Tg + 0,1 × Tbs = 0,7 × ${resultado.intermediarios.tbn} + 0,2 × ${resultado.intermediarios.tg} + 0,1 × ${resultado.intermediarios.tbs} = <strong>${resultado.ibutgValue}°C</strong>`
-    : `IBUTG = 0,7 × Tbn + 0,3 × Tg = 0,7 × ${resultado.intermediarios.tbn} + 0,3 × ${resultado.intermediarios.tg} = <strong>${resultado.ibutgValue}°C</strong>`;
-
-  const html = `<!DOCTYPE html><html lang="pt-BR"><head>
-<meta charset="UTF-8"><title>Laudo IBUTG — NEXUS SST</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;padding:30px 36px;max-width:800px;margin:0 auto;line-height:1.6}
-  h1{font-size:17px;color:#0d2a5e;margin-bottom:2px}
-  h2{font-size:12px;color:#0d2a5e;margin:18px 0 6px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;text-transform:uppercase;letter-spacing:0.5px}
-  table{width:100%;border-collapse:collapse;margin-bottom:8px}
-  th{background:#0d2a5e;color:#fff;padding:6px 8px;text-align:left;font-size:10px}
-  td{padding:6px 8px;border-bottom:1px solid #e2e8f0;font-size:11px}
-  tr:nth-child(even) td{background:#f8fafc}
-  .resultado{text-align:center;padding:18px;border-radius:8px;border:2px solid ${cor};background:${cor}18;margin:12px 0}
-  .ibutg-val{font-size:40px;font-weight:800;color:${cor};line-height:1}
-  .nivel{font-size:14px;font-weight:700;color:${cor};margin-top:4px}
-  .noprint{display:none}
-  .footer{margin-top:24px;font-size:9.5px;color:#64748b;border-top:1px solid #e2e8f0;padding-top:8px}
-  .assinatura{margin-top:36px;display:flex;gap:60px}
-  .assinatura div{border-top:1px solid #555;padding-top:4px;font-size:10px;min-width:160px}
-  @media print{.noprint{display:none}}
-</style></head><body>
-
-<button class="noprint" onclick="window.print()" style="background:#0d2a5e;color:#fff;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;margin-bottom:20px;font-size:12px">Imprimir / Salvar PDF</button>
-
-<h1>LAUDO DE AVALIAÇÃO DE ESTRESSE TÉRMICO — IBUTG</h1>
-<p style="color:#64748b;font-size:10px;margin-bottom:14px">Sistema NEXUS SST · Technogov Soluções · NHO 06 Fundacentro · NR-15 Anexo 3</p>
-
-<h2>1. Identificação do Local</h2>
-<table>
-  <tr><td style="width:35%;font-weight:600">Local / Endereço</td><td>${localStr}</td></tr>
-  <tr><td style="font-weight:600">Endereço completo</td><td>${endFull}</td></tr>
-  <tr><td style="font-weight:600">Coordenadas geográficas</td><td>${lat}, ${lon}</td></tr>
-  <tr><td style="font-weight:600">Data e hora da avaliação</td><td>${data}</td></tr>
-  <tr><td style="font-weight:600">Ambiente</td><td>${outdoor ? "Ao ar livre (externo)" : "Ambiente interno (coberto)"}</td></tr>
-</table>
-
-<h2>2. Atividade Avaliada</h2>
-<table>
-  <tr><td style="width:35%;font-weight:600">Descrição da atividade</td><td>${atividadeLabel}</td></tr>
-  <tr><td style="font-weight:600">Taxa metabólica</td><td>${metab} W (ISO 8996 / NHO 06 Tabela 1)</td></tr>
-  <tr><td style="font-weight:600">Categoria metabólica</td><td>${resultado.categoria}</td></tr>
-  <tr><td style="font-weight:600">Limite IBUTG — NHO 06</td><td>${resultado.limiteNHO06}°C (trabalho contínuo 60 min)</td></tr>
-</table>
-
-<h2>3. Condições Climáticas (Open-Meteo)</h2>
-<table>
-  <thead><tr><th>Parâmetro</th><th>Símbolo</th><th>Valor</th><th>Unidade</th></tr></thead>
-  <tbody>
-    <tr><td>Temperatura do ar (bulbo seco)</td><td>T<sub>bs</sub> / T<sub>a</sub></td><td>${resultado.condicoes.ta}</td><td>°C</td></tr>
-    <tr><td>Umidade relativa do ar</td><td>UR</td><td>${resultado.condicoes.ur}</td><td>%</td></tr>
-    <tr><td>Velocidade do vento</td><td>v</td><td>${resultado.condicoes.v}</td><td>m/s</td></tr>
-    <tr><td>Irradiação horizontal global</td><td>GHI</td><td>${resultado.condicoes.ghi}</td><td>W/m²</td></tr>
-    <tr><td>Fonte dos dados</td><td colspan="3">${resultado.fonte}${resultado.cacheado ? " (cache 1h)" : " (tempo real)"}</td></tr>
-  </tbody>
-</table>
-
-<h2>4. Temperaturas Calculadas</h2>
-<table>
-  <thead><tr><th>Temperatura</th><th>Símbolo</th><th>Valor</th><th>Método</th></tr></thead>
-  <tbody>
-    <tr><td>Bulbo úmido natural</td><td>T<sub>bn</sub></td><td>${resultado.intermediarios.tbn}°C</td><td>Equação psicrométrica natural — Sprung (1888) / NHO 06 §4.2 — A = 7,99×10⁻⁴ kPa/Pa</td></tr>
-    <tr><td>Globo negro estimado (Ø 150mm)</td><td>T<sub>g</sub></td><td>${resultado.intermediarios.tg}°C</td><td>Modelo Liljegren (2008) — balanço energético, Nu = 2 + 0,6·Re⁰˒⁵·Pr¹/³ — NHO 06 §5.2</td></tr>
-    <tr><td>Bulbo seco</td><td>T<sub>bs</sub></td><td>${resultado.intermediarios.tbs}°C</td><td>Open-Meteo API</td></tr>
-  </tbody>
-</table>
-
-<h2>5. Cálculo do IBUTG</h2>
-<p style="margin-bottom:8px">${formula}</p>
-
-<div class="resultado">
-  <div class="ibutg-val">${resultado.ibutgValue}°C</div>
-  <div style="font-size:12px;color:${cor};margin:4px 0">IBUTG — ${outdoor ? "Ao ar livre" : "Ambiente interno"}</div>
-  <div class="nivel">${resultado.nivelRisco}</div>
-  <div style="font-size:11px;color:#64748b;margin-top:4px">
-    Limite NHO 06: ${resultado.limiteNHO06}°C · ${resultado.excedeLimite ? `Excedido em ${(resultado.ibutgValue - resultado.limiteNHO06).toFixed(1)}°C` : "Dentro do limite"}
-  </div>
-</div>
-
-${esocial}
-
-<h2>6. Regime de Trabalho Recomendado (NR-15 Quadro 2)</h2>
-<table>
-  <tr><td style="width:35%;font-weight:600">Regime</td><td>${resultado.recomendacaoPausa.desc}</td></tr>
-  ${resultado.recomendacaoPausa.trabMin > 0 ? `
-  <tr><td style="font-weight:600">Trabalho</td><td>${resultado.recomendacaoPausa.trabMin} min por hora</td></tr>
-  <tr><td style="font-weight:600">Descanso</td><td>${resultado.recomendacaoPausa.descMin} min por hora</td></tr>` : ""}
-</table>
-
-<h2>7. Base Normativa</h2>
-<p style="font-size:10.5px;line-height:1.8;color:#374151">
-  NHO 06 — Fundacentro (2025): Avaliação da Exposição Ocupacional ao Calor<br>
-  NR-15 Anexo 3 — Limites de Tolerância para Exposição ao Calor (MTE)<br>
-  NR-09 §9.3.5.4 — Programa de Prevenção de Riscos Ambientais<br>
-  ISO 8996:2004 — Ergonomics of the thermal environment — Metabolic rate determination<br>
-  Liljegren, J.C. et al. (2008): Modeling the Wet Bulb Globe Temperature Using Standard Meteorological Measurements — J. Occup. Environ. Hyg. 5(10)
-</p>
-
-<div class="assinatura">
-  <div>Responsável Técnico<br><br><br>Nome / CRM ou CREA:<br>Data: ___/___/______</div>
-  <div>Empresa Avaliada<br><br><br>Razão Social:<br>CNPJ:</div>
-</div>
-
-<div class="footer">
-  Laudo gerado automaticamente pelo sistema NEXUS SST (Technogov Soluções) · ${new Date().toLocaleString("pt-BR")} ·
-  Dados climáticos: Open-Meteo (free, global coverage) · Cálculo: Modelo Liljegren (2008) / NHO 06 Fundacentro
-</div>
-</body></html>`;
-
-  const w = window.open("", "_blank");
-  w.document.write(html);
-  w.document.close();
-}
-
 // ── Componente principal ──────────────────────────────────────────────────────
-export default function IbutgPublico() {
+export default function IbutgPublico({ linkId = null }) {
   const [lat,      setLat]      = useState("");
   const [lon,      setLon]      = useState("");
   const [metab,    setMetab]    = useState(215);
@@ -182,6 +51,42 @@ export default function IbutgPublico() {
   const [carregando, setCarregando] = useState(false);
   const [geoLoad,    setGeoLoad]    = useState(false);
   const [erro,       setErro]       = useState("");
+
+  // ── Identificação (empresa vinculada ao link, ou preenchimento manual) ──
+  const [vinculo,        setVinculo]        = useState(null); // doc de avaliacoes_ibutg_publicas/{linkId}
+  const [carregandoLink, setCarregandoLink] = useState(!!linkId);
+  const [erroLink,       setErroLink]       = useState("");
+  const [colaboradorId,  setColaboradorId]  = useState("");
+  const [empresaManual,  setEmpresaManual]  = useState("");
+  const [colaboradorManual, setColaboradorManual] = useState("");
+  const [responsavel,    setResponsavel]    = useState({ nome: "", cargo: "", crea: "" });
+
+  useEffect(() => {
+    if (!linkId) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "avaliacoes_ibutg_publicas", linkId));
+        if (!snap.exists()) { setErroLink("Link inválido ou expirado."); return; }
+        const data = snap.data();
+        setVinculo(data);
+        if (data.responsavelPadrao) setResponsavel(data.responsavelPadrao);
+      } catch (e) {
+        setErroLink("Erro ao carregar dados vinculados: " + e.message);
+      } finally {
+        setCarregandoLink(false);
+      }
+    })();
+  }, [linkId]);
+
+  const colaboradoresInfo = vinculo?.colaboradoresInfo || [];
+  const colaboradorSelecionado = colaboradoresInfo.find(c => c.id === colaboradorId);
+
+  const empresaLaudo = vinculo?.empresaInfo
+    ? vinculo.empresaInfo
+    : (empresaManual ? { razao: empresaManual } : null);
+  const colaboradorLaudo = vinculo
+    ? (colaboradorSelecionado ? { nome: colaboradorSelecionado.nome, cargo: colaboradorSelecionado.cargo } : null)
+    : (colaboradorManual ? { nome: colaboradorManual } : null);
 
   const atividadeLabel = ATIVIDADES_METABOLICAS.find(a => a.w === +metab)?.label || `Personalizado — ${metab} W`;
   const coresRes = resultado ? (CORES_RISCO[resultado.nivelRisco] ?? CORES_RISCO["Aceitável"]) : null;
@@ -237,6 +142,62 @@ export default function IbutgPublico() {
       </div>
 
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px 14px 60px" }}>
+
+        {/* Card Identificação */}
+        <div style={card()}>
+          <span style={label}>🏢 Identificação para o Laudo</span>
+
+          {carregandoLink && <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>⏳ Carregando dados da empresa…</p>}
+          {erroLink && <p style={{ fontSize: 12, color: C.red, margin: 0 }}>{erroLink}</p>}
+
+          {vinculo && (
+            <>
+              <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>
+                <p style={{ fontSize: 13, color: "#15803d", fontWeight: 700, margin: 0 }}>{vinculo.empresaInfo?.razao}</p>
+                {vinculo.empresaInfo?.cnpj && <p style={{ fontSize: 11, color: "#166534", margin: "2px 0 0" }}>CNPJ {vinculo.empresaInfo.cnpj}</p>}
+              </div>
+
+              {colaboradoresInfo.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Colaborador avaliado</p>
+                  <select value={colaboradorId} onChange={e => setColaboradorId(e.target.value)} style={inputStyle}>
+                    <option value="">— Selecione —</option>
+                    {colaboradoresInfo.map(c => (
+                      <option key={c.id} value={c.id}>{c.nome}{c.cargo ? ` — ${c.cargo}` : ""}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
+
+          {!linkId && !carregandoLink && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Empresa avaliada</p>
+                <input value={empresaManual} onChange={e => setEmpresaManual(e.target.value)} placeholder="Razão social da empresa"
+                  style={{ ...inputStyle, fontSize: 13 }} />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Colaborador avaliado</p>
+                <input value={colaboradorManual} onChange={e => setColaboradorManual(e.target.value)} placeholder="Nome do colaborador"
+                  style={{ ...inputStyle, fontSize: 13 }} />
+              </div>
+            </>
+          )}
+
+          <p style={{ fontSize: 11, color: C.muted, margin: "6px 0 4px", fontWeight: 500 }}>Responsável técnico</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginBottom: 8 }}>
+            <input value={responsavel.nome} onChange={e => setResponsavel(p => ({ ...p, nome: e.target.value }))} placeholder="Nome do responsável"
+              style={{ ...inputStyle, fontSize: 13 }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <input value={responsavel.cargo} onChange={e => setResponsavel(p => ({ ...p, cargo: e.target.value }))} placeholder="Cargo (ex: Eng. de Segurança)"
+              style={{ ...inputStyle, fontSize: 13 }} />
+            <input value={responsavel.crea} onChange={e => setResponsavel(p => ({ ...p, crea: e.target.value }))} placeholder="CREA"
+              style={{ ...inputStyle, fontSize: 13 }} />
+          </div>
+        </div>
 
         {/* Card GPS */}
         <div style={card()}>
@@ -389,7 +350,10 @@ export default function IbutgPublico() {
 
             {/* Botão laudo */}
             <button
-              onClick={() => gerarLaudo(resultado, endereco, lat, lon, metab, atividadeLabel, outdoor)}
+              onClick={() => gerarLaudoIBUTG({
+                resultado, endereco, lat, lon, metab, atividadeLabel, outdoor,
+                empresa: empresaLaudo, colaborador: colaboradorLaudo, responsavel,
+              })}
               style={{ width: "100%", padding: "14px", borderRadius: 12, border: `2px solid ${C.navyMid}`, background: "#eff6ff", color: C.navyMid, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginTop: 4 }}>
               📄 Gerar Laudo Pericial
             </button>

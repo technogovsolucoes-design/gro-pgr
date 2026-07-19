@@ -1,11 +1,14 @@
 import { useState } from "react";
+import { addDoc, collection } from "firebase/firestore";
 import {
   Thermometer, Wind, Droplets, Sun, MapPin, Loader,
   AlertTriangle, CheckCircle, XCircle, Clock, Info,
-  RefreshCw, ChevronDown,
+  RefreshCw, ChevronDown, Building2, FileText, Link2, Copy,
 } from "lucide-react";
 import { C } from "../../constants";
 import { Btn, Card, SectionTitle } from "../../components/ui";
+import { useApp } from "../../context/AppContext";
+import { db } from "../../firebase";
 import {
   calcularEstresseTermico,
   obterLocalizacao,
@@ -13,6 +16,7 @@ import {
   ATIVIDADES_METABOLICAS,
   CORES_RISCO,
 } from "../../services/heatStressClient";
+import { gerarLaudoIBUTG } from "../../services/laudoIbutg";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Sub-components
@@ -84,6 +88,8 @@ function NivelRiscoChip({ nivelRisco }) {
 // Main component
 // ──────────────────────────────────────────────────────────────────────────────
 export default function EstresseTermico() {
+  const { empresaAtiva, funcionarios } = useApp();
+
   // ── Inputs ──
   const [lat,      setLat]      = useState("");
   const [lon,      setLon]      = useState("");
@@ -92,6 +98,12 @@ export default function EstresseTermico() {
   const [manual,   setManual]   = useState(false);
   const [manualW,  setManualW]  = useState({ ta: "", ur: "", v: "", ghi: "" });
 
+  // ── Identificação (empresa / colaborador / responsável técnico) ──
+  const [colaboradorId, setColaboradorId] = useState("");
+  const [responsavel,   setResponsavel]   = useState({ nome: "", cargo: "", crea: "" });
+  const [linkGerado,    setLinkGerado]    = useState("");
+  const [gerandoLink,   setGerandoLink]   = useState(false);
+
   // ── State ──
   const [resultado,  setResultado]  = useState(null);
   const [endereco,   setEndereco]   = useState(null);
@@ -99,6 +111,32 @@ export default function EstresseTermico() {
   const [geoLoad,    setGeoLoad]    = useState(false);
   const [erro,       setErro]       = useState("");
   const [showTecnico, setShowTecnico] = useState(false);
+
+  const colaboradorSelecionado = funcionarios.find(f => f.id === colaboradorId);
+
+  // ── Gerar link público de coleta em campo (vinculado à empresa ativa) ──
+  async function gerarLinkColeta() {
+    if (!empresaAtiva) return;
+    setGerandoLink(true);
+    try {
+      const ref = await addDoc(collection(db, "avaliacoes_ibutg_publicas"), {
+        empresaId: empresaAtiva.id,
+        empresaInfo: {
+          razao: empresaAtiva.razao || "",
+          cnpj:  empresaAtiva.cnpj  || "",
+          endereco: empresaAtiva.endereco || "",
+        },
+        colaboradoresInfo: funcionarios.map(f => ({ id: f.id, nome: f.nome, cargo: f.cargo || "", setorId: f.setorId || "" })),
+        responsavelPadrao: responsavel,
+        criadoEm: new Date().toISOString(),
+      });
+      setLinkGerado(`${window.location.origin}/ibutg/${ref.id}`);
+    } catch (e) {
+      setErro("Erro ao gerar link: " + e.message);
+    } finally {
+      setGerandoLink(false);
+    }
+  }
 
   // ── Geolocation ──
   async function usarLocalizacao() {
@@ -150,6 +188,7 @@ export default function EstresseTermico() {
   }
 
   const coresRes = resultado ? (CORES_RISCO[resultado.nivelRisco] ?? CORES_RISCO["Aceitável"]) : null;
+  const atividadeLabel = ATIVIDADES_METABOLICAS.find(a => a.w === +metab)?.label || `Personalizado — ${metab} W`;
 
   return (
     <div>
@@ -167,6 +206,53 @@ export default function EstresseTermico() {
         {/* ── Painel de inputs ──────────────────────────────────────────────── */}
         <div>
           <Card>
+            <SectionTitle><Building2 size={14} /> Identificação</SectionTitle>
+
+            <div style={{ background: C.bg, borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+              <p style={{ fontSize: 10, color: C.muted, margin: "0 0 2px", fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.4 }}>Empresa</p>
+              <p style={{ fontSize: 13, fontWeight: 600, color: C.navy, margin: 0 }}>{empresaAtiva?.razao || "—"}</p>
+              {empresaAtiva?.cnpj && <p style={{ fontSize: 11, color: C.muted, margin: "2px 0 0" }}>CNPJ {empresaAtiva.cnpj}</p>}
+            </div>
+
+            <div style={{ marginBottom: 10 }}>
+              <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Colaborador avaliado</p>
+              <select value={colaboradorId} onChange={e => setColaboradorId(e.target.value)}
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: "inherit", color: C.text, background: C.white }}>
+                <option value="">— Selecione —</option>
+                {funcionarios.map(f => <option key={f.id} value={f.id}>{f.nome}{f.cargo ? ` — ${f.cargo}` : ""}</option>)}
+              </select>
+            </div>
+
+            <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Responsável técnico</p>
+            <div style={{ marginBottom: 8 }}>
+              <input value={responsavel.nome} onChange={e => setResponsavel(p => ({ ...p, nome: e.target.value }))} placeholder="Nome do engenheiro/técnico"
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: "inherit", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+              <input value={responsavel.cargo} onChange={e => setResponsavel(p => ({ ...p, cargo: e.target.value }))} placeholder="Cargo (ex: Eng. Segurança)"
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: "inherit", boxSizing: "border-box" }} />
+              <input value={responsavel.crea} onChange={e => setResponsavel(p => ({ ...p, crea: e.target.value }))} placeholder="CREA"
+                style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: "inherit", boxSizing: "border-box" }} />
+            </div>
+
+            <button onClick={gerarLinkColeta} disabled={gerandoLink || !empresaAtiva}
+              style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.navyMid}`, background: "#eff6ff", color: C.navyMid, cursor: gerandoLink ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 600, fontFamily: "inherit" }}>
+              {gerandoLink ? <Loader size={12} /> : <Link2 size={12} />}
+              {gerandoLink ? "Gerando link…" : "Gerar link p/ coleta em campo"}
+            </button>
+
+            {linkGerado && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 6, padding: "6px 8px" }}>
+                <p style={{ fontSize: 10.5, color: "#15803d", margin: 0, flex: 1, wordBreak: "break-all" }}>{linkGerado}</p>
+                <button onClick={() => navigator.clipboard?.writeText(linkGerado)} title="Copiar link"
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#15803d", flexShrink: 0 }}>
+                  <Copy size={13} />
+                </button>
+              </div>
+            )}
+          </Card>
+
+          <Card style={{ marginTop: 12 }}>
             <SectionTitle><MapPin size={14} /> Localização</SectionTitle>
 
             <button onClick={usarLocalizacao} disabled={geoLoad}
@@ -441,6 +527,17 @@ export default function EstresseTermico() {
                   </div>
                 )}
               </Card>
+
+              <button
+                onClick={() => gerarLaudoIBUTG({
+                  resultado, endereco, lat, lon, metab, atividadeLabel, outdoor,
+                  empresa: empresaAtiva ? { razao: empresaAtiva.razao, cnpj: empresaAtiva.cnpj, endereco: empresaAtiva.endereco } : null,
+                  colaborador: colaboradorSelecionado ? { nome: colaboradorSelecionado.nome, cargo: colaboradorSelecionado.cargo } : null,
+                  responsavel,
+                })}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "12px", borderRadius: 10, border: `2px solid ${C.navyMid}`, background: "#eff6ff", color: C.navyMid, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginTop: 12 }}>
+                <FileText size={14} /> Gerar Laudo Pericial
+              </button>
             </div>
           )}
         </div>
