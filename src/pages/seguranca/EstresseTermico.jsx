@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   Thermometer, Wind, Droplets, Sun, MapPin, Loader,
   AlertTriangle, CheckCircle, XCircle, Clock, Info,
-  RefreshCw, ChevronDown,
+  RefreshCw, ChevronDown, FileText,
 } from "lucide-react";
 import { C } from "../../constants";
 import { Btn, Card, SectionTitle } from "../../components/ui";
@@ -13,6 +13,8 @@ import {
   ATIVIDADES_METABOLICAS,
   CORES_RISCO,
 } from "../../services/heatStressClient";
+import { gerarLaudoIbutg } from "../../services/laudoIbutg";
+import { useApp } from "../../context/AppContext";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Sub-components
@@ -84,6 +86,8 @@ function NivelRiscoChip({ nivelRisco }) {
 // Main component
 // ──────────────────────────────────────────────────────────────────────────────
 export default function EstresseTermico() {
+  const { userProfile } = useApp();
+
   // ── Inputs ──
   const [lat,      setLat]      = useState("");
   const [lon,      setLon]      = useState("");
@@ -150,6 +154,7 @@ export default function EstresseTermico() {
   }
 
   const coresRes = resultado ? (CORES_RISCO[resultado.nivelRisco] ?? CORES_RISCO["Aceitável"]) : null;
+  const atividadeLabel = ATIVIDADES_METABOLICAS.find(a => a.w === +metab)?.label || `Personalizado — ${metab} W`;
 
   return (
     <div>
@@ -441,6 +446,22 @@ export default function EstresseTermico() {
                   </div>
                 )}
               </Card>
+
+              {/* ── Gerar Laudo Pericial ── */}
+              <button
+                onClick={() => gerarLaudoIbutg({
+                  resultado, endereco, lat, lon, metab, atividadeLabel, outdoor,
+                  assinante: {
+                    nome:      userProfile?.nome      || "",
+                    registro:  userProfile?.registro  || userProfile?.crea || userProfile?.crm || "",
+                    perfil:    userProfile?.perfil    || "Responsável Técnico",
+                    empresa:   "",
+                  },
+                })}
+                style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.navyMid}`, background: "#eff6ff", color: C.navyMid, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                <FileText size={13} /> Gerar Laudo Pericial (PDF)
+              </button>
             </div>
           )}
         </div>
