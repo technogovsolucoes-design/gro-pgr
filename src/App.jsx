@@ -283,6 +283,8 @@ export default function App() {
   // Rotas públicas — interceptam ANTES do fluxo de auth
   const m = window.location.pathname.match(/^\/responder\/([^/]+)/);
   if (m) return <RespondentePage questionarioId={m[1]} />;
+  const mIbutg = window.location.pathname.match(/^\/ibutg\/([^/]+)/);
+  if (mIbutg) return <IbutgPublico linkId={mIbutg[1]} />;
   if (window.location.pathname.startsWith("/ibutg")) return <IbutgPublico />;
 
   return <AppProvider><AppContent /></AppProvider>;

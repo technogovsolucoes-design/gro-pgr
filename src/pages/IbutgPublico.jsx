@@ -2,7 +2,9 @@
  * Página pública mobile de cálculo IBUTG — /ibutg
  * Sem autenticação. Layout otimizado para celular + geração de laudo pericial.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { NexusLogo } from "../assets/NexusLogo";
 import {
   calcularEstresseTermico,
@@ -11,7 +13,7 @@ import {
   ATIVIDADES_METABOLICAS,
   CORES_RISCO,
 } from "../services/heatStressClient";
-import { gerarLaudoIbutg } from "../services/laudoIbutg";
+import { gerarLaudoIBUTG } from "../services/laudoIbutg";
 
 const C = {
   navy:    "#0d2a5e",
@@ -38,19 +40,53 @@ const label = { fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 4, 
 const inputStyle = { width: "100%", padding: "11px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 15, fontFamily: "inherit", boxSizing: "border-box", color: "#1e293b" };
 
 // ── Componente principal ──────────────────────────────────────────────────────
-export default function IbutgPublico() {
+export default function IbutgPublico({ linkId = null }) {
   const [lat,      setLat]      = useState("");
   const [lon,      setLon]      = useState("");
   const [metab,    setMetab]    = useState(215);
   const [outdoor,  setOutdoor]  = useState(true);
-
-  const [responsavel, setResponsavel] = useState({ nome: "", registro: "", empresa: "" });
 
   const [resultado,  setResultado]  = useState(null);
   const [endereco,   setEndereco]   = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [geoLoad,    setGeoLoad]    = useState(false);
   const [erro,       setErro]       = useState("");
+
+  // ── Identificação (empresa vinculada ao link, ou preenchimento manual) ──
+  const [vinculo,        setVinculo]        = useState(null); // doc de avaliacoes_ibutg_publicas/{linkId}
+  const [carregandoLink, setCarregandoLink] = useState(!!linkId);
+  const [erroLink,       setErroLink]       = useState("");
+  const [colaboradorId,  setColaboradorId]  = useState("");
+  const [empresaManual,  setEmpresaManual]  = useState("");
+  const [colaboradorManual, setColaboradorManual] = useState("");
+  const [responsavel,    setResponsavel]    = useState({ nome: "", cargo: "", crea: "" });
+
+  useEffect(() => {
+    if (!linkId) return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "avaliacoes_ibutg_publicas", linkId));
+        if (!snap.exists()) { setErroLink("Link inválido ou expirado."); return; }
+        const data = snap.data();
+        setVinculo(data);
+        if (data.responsavelPadrao) setResponsavel(data.responsavelPadrao);
+      } catch (e) {
+        setErroLink("Erro ao carregar dados vinculados: " + e.message);
+      } finally {
+        setCarregandoLink(false);
+      }
+    })();
+  }, [linkId]);
+
+  const colaboradoresInfo = vinculo?.colaboradoresInfo || [];
+  const colaboradorSelecionado = colaboradoresInfo.find(c => c.id === colaboradorId);
+
+  const empresaLaudo = vinculo?.empresaInfo
+    ? vinculo.empresaInfo
+    : (empresaManual ? { razao: empresaManual } : null);
+  const colaboradorLaudo = vinculo
+    ? (colaboradorSelecionado ? { nome: colaboradorSelecionado.nome, cargo: colaboradorSelecionado.cargo } : null)
+    : (colaboradorManual ? { nome: colaboradorManual } : null);
 
   const atividadeLabel = ATIVIDADES_METABOLICAS.find(a => a.w === +metab)?.label || `Personalizado — ${metab} W`;
   const coresRes = resultado ? (CORES_RISCO[resultado.nivelRisco] ?? CORES_RISCO["Aceitável"]) : null;
@@ -106,6 +142,62 @@ export default function IbutgPublico() {
       </div>
 
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px 14px 60px" }}>
+
+        {/* Card Identificação */}
+        <div style={card()}>
+          <span style={label}>🏢 Identificação para o Laudo</span>
+
+          {carregandoLink && <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>⏳ Carregando dados da empresa…</p>}
+          {erroLink && <p style={{ fontSize: 12, color: C.red, margin: 0 }}>{erroLink}</p>}
+
+          {vinculo && (
+            <>
+              <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, padding: "8px 12px", marginBottom: 10 }}>
+                <p style={{ fontSize: 13, color: "#15803d", fontWeight: 700, margin: 0 }}>{vinculo.empresaInfo?.razao}</p>
+                {vinculo.empresaInfo?.cnpj && <p style={{ fontSize: 11, color: "#166534", margin: "2px 0 0" }}>CNPJ {vinculo.empresaInfo.cnpj}</p>}
+              </div>
+
+              {colaboradoresInfo.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Colaborador avaliado</p>
+                  <select value={colaboradorId} onChange={e => setColaboradorId(e.target.value)} style={inputStyle}>
+                    <option value="">— Selecione —</option>
+                    {colaboradoresInfo.map(c => (
+                      <option key={c.id} value={c.id}>{c.nome}{c.cargo ? ` — ${c.cargo}` : ""}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
+
+          {!linkId && !carregandoLink && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Empresa avaliada</p>
+                <input value={empresaManual} onChange={e => setEmpresaManual(e.target.value)} placeholder="Razão social da empresa"
+                  style={{ ...inputStyle, fontSize: 13 }} />
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>Colaborador avaliado</p>
+                <input value={colaboradorManual} onChange={e => setColaboradorManual(e.target.value)} placeholder="Nome do colaborador"
+                  style={{ ...inputStyle, fontSize: 13 }} />
+              </div>
+            </>
+          )}
+
+          <p style={{ fontSize: 11, color: C.muted, margin: "6px 0 4px", fontWeight: 500 }}>Responsável técnico</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginBottom: 8 }}>
+            <input value={responsavel.nome} onChange={e => setResponsavel(p => ({ ...p, nome: e.target.value }))} placeholder="Nome do responsável"
+              style={{ ...inputStyle, fontSize: 13 }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <input value={responsavel.cargo} onChange={e => setResponsavel(p => ({ ...p, cargo: e.target.value }))} placeholder="Cargo (ex: Eng. de Segurança)"
+              style={{ ...inputStyle, fontSize: 13 }} />
+            <input value={responsavel.crea} onChange={e => setResponsavel(p => ({ ...p, crea: e.target.value }))} placeholder="CREA"
+              style={{ ...inputStyle, fontSize: 13 }} />
+          </div>
+        </div>
 
         {/* Card GPS */}
         <div style={card()}>
@@ -256,36 +348,14 @@ export default function IbutgPublico() {
               {resultado.cacheado && <p style={{ fontSize: 10, color: C.muted, margin: "8px 0 0" }}>Dados do cache Open-Meteo (atualização por hora)</p>}
             </div>
 
-            {/* Responsável técnico */}
-            <div style={card({ border: "1px solid #bfdbfe", background: "#eff6ff" })}>
-              <p style={{ fontSize: 10, color: "#1d4ed8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 10px" }}>
-                🔏 Responsável Técnico (para o laudo)
-              </p>
-              {[
-                { key: "nome",      label: "Nome completo",           ph: "Dr. João Silva" },
-                { key: "registro",  label: "Registro (CRM / CREA / RRT)", ph: "CREA/SP 123456" },
-                { key: "empresa",   label: "Empresa / Organização",   ph: "Empresa Ltda." },
-              ].map(({ key, label: lbl, ph }) => (
-                <div key={key} style={{ marginBottom: 8 }}>
-                  <p style={{ fontSize: 11, color: C.muted, margin: "0 0 4px", fontWeight: 500 }}>{lbl}</p>
-                  <input
-                    value={responsavel[key]}
-                    onChange={e => setResponsavel(p => ({ ...p, [key]: e.target.value }))}
-                    placeholder={ph}
-                    style={{ ...inputStyle, fontSize: 13 }}
-                  />
-                </div>
-              ))}
-            </div>
-
             {/* Botão laudo */}
             <button
-              onClick={() => gerarLaudoIbutg({
+              onClick={() => gerarLaudoIBUTG({
                 resultado, endereco, lat, lon, metab, atividadeLabel, outdoor,
-                assinante: { ...responsavel, perfil: "Responsável Técnico" },
+                empresa: empresaLaudo, colaborador: colaboradorLaudo, responsavel,
               })}
               style={{ width: "100%", padding: "14px", borderRadius: 12, border: `2px solid ${C.navyMid}`, background: "#eff6ff", color: C.navyMid, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginTop: 4 }}>
-              📄 Gerar Laudo Pericial (PDF)
+              📄 Gerar Laudo Pericial
             </button>
           </>
         )}

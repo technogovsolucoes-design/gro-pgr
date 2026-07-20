@@ -62,21 +62,26 @@ export function AppProvider({ children }) {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      if (u) {
-        const snap = await getDoc(doc(db, "usuarios", u.uid));
-        if (snap.exists()) {
-          setUserProfile(snap.data());
+      try {
+        if (u) {
+          const snap = await getDoc(doc(db, "usuarios", u.uid));
+          if (snap.exists()) {
+            setUserProfile(snap.data());
+          } else {
+            const defaultProfile = { nome: u.email, email: u.email, perfil: "Gestor", empresas: [] };
+            await setDoc(doc(db, "usuarios", u.uid), defaultProfile);
+            setUserProfile(defaultProfile);
+          }
         } else {
-          const defaultProfile = { nome: u.email, email: u.email, perfil: "Gestor", empresas: [] };
-          await setDoc(doc(db, "usuarios", u.uid), defaultProfile);
-          setUserProfile(defaultProfile);
+          setUserProfile(null);
+          setEmpresaAtiva(null);
+          setEmpresas([]);
         }
-      } else {
-        setUserProfile(null);
-        setEmpresaAtiva(null);
-        setEmpresas([]);
+      } catch (e) {
+        console.error("[Auth] Falha ao carregar perfil do usuário:", e.message);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsub;
   }, []);
