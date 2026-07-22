@@ -97,30 +97,32 @@ export default async function handler(request) {
     // Extrai o nome do botão Detalhar da primeira linha (ctl02 = primeira linha de dados)
     const btnDetalhar = extractBtnDetalhar(listHtml);
     if (!btnDetalhar) {
-      // Se não há botão de detalhe, tenta extrair o que tem diretamente da lista
       return json(buildFromList(listHtml, ca, listFabricante));
     }
 
-    // VIEWSTATE atualizado após a busca
-    const h1 = Object.keys(delta1.hidden).length ? delta1.hidden : h0;
+    // VIEWSTATE/EVENTVALIDATION atualizados no Delta step 1
+    const h1 = {
+      vs:  delta1.hidden["__VIEWSTATE"]          || h0.vs,
+      vsg: delta1.hidden["__VIEWSTATEGENERATOR"] || h0.vsg,
+      ev:  delta1.hidden["__EVENTVALIDATION"]    || h0.ev,
+    };
 
-    // ── 3. POST detalhar — clica no botão de detalhamento ─────────────────
-    // ImageButton usa __EVENTTARGET com o UniqueID do botão
+    // ── 3. POST detalhar — ImageButton dentro do UpdatePanel ───────────────
+    // Botões dentro do painel disparam async postback com __EVENTTARGET
     const btnUnique = `ctl00$PlaceHolderConteudo$${btnDetalhar}`;
-    const body2 = buildBody({
-      sm: `${PANEL}|${btnUnique}`,
-      hidden: h1,
-      extra: {
-        __EVENTTARGET:  btnUnique,
-        "ctl00$PlaceHolderConteudo$txtNumeroCA":    ca,
-        "ctl00$PlaceHolderConteudo$cboEquipamento":  selEquip,
-        "ctl00$PlaceHolderConteudo$cboFabricante":   selFabric,
-        "ctl00$PlaceHolderConteudo$cboTipoProtecao": selTipo,
-        // Image button: coordenadas (0,0)
-        [`${btnUnique}.x`]: "0",
-        [`${btnUnique}.y`]: "0",
-      },
-    });
+    const body2 = new URLSearchParams({
+      [SM]:                                        `${PANEL}|${btnUnique}`,
+      __EVENTTARGET:                               btnUnique,
+      __EVENTARGUMENT:                             "",
+      __ASYNCPOST:                                 "true",
+      __VIEWSTATE:                                 h1.vs,
+      __VIEWSTATEGENERATOR:                        h1.vsg,
+      __EVENTVALIDATION:                           h1.ev,
+      "ctl00$PlaceHolderConteudo$txtNumeroCA":     ca,
+      "ctl00$PlaceHolderConteudo$cboEquipamento":  selEquip,
+      "ctl00$PlaceHolderConteudo$cboFabricante":   selFabric,
+      "ctl00$PlaceHolderConteudo$cboTipoProtecao": selTipo,
+    }).toString();
 
     const post2Resp = await fetch(CA_URL, {
       method: "POST",
