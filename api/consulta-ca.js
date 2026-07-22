@@ -246,7 +246,8 @@ function fieldVal(html, name) {
 
 // ── Extrai valor de span por id parcial ──────────────────────────────────────
 function extractSpan(html, idSuffix) {
-  const re = new RegExp(`id="[^"]*${idSuffix}[^"]*">([^<]+)<`, "i");
+  // [^>]* permite atributos extras entre o id e o > (ex: style="color:Red;")
+  const re = new RegExp(`id="[^"]*${idSuffix}[^"]*"[^>]*>([^<]+)<`, "i");
   const m = html.match(re);
   return m ? m[1].trim() : "";
 }
@@ -260,67 +261,29 @@ function extractBtnDetalhar(html) {
 
 // ── Parse da página de detalhe do CA ─────────────────────────────────────────
 function parseDetail(html, caQuery, listFabricante) {
-  // Sem resultado
-  if (/nenhum|n[ãa]o.*encontrado/i.test(html) && !html.includes("Validade")) return null;
-
-  const cell = (label) => {
-    const re = new RegExp(
-      `${label}[^<]*<\\/(?:td|th|span|div)>[^<]*<(?:td|th|span|div)[^>]*>([^<]{2,200})`,
-      "i"
-    );
-    const m = html.match(re);
-    return m ? m[1].replace(/<[^>]+>/g, "").trim() : "";
-  };
-
-  const colon = (label) => {
-    const re = new RegExp(`${label}[^:]*:\\s*([^<\\n]{2,200})`, "i");
-    const m = html.match(re);
-    return m ? m[1].trim() : "";
-  };
+  if (!html.includes("lblNRRegistroCA") && !html.includes("lblSituacao")) return null;
 
   const spanById = (id) => extractSpan(html, id);
 
-  // Tenta por spans com IDs conhecidos, depois por label → next cell, depois por label:value
-  const nome = spanById("lblDescricaoEPI") ||
-               spanById("lblEquipamento") ||
-               cell("Descri[çc][ãa]o") || cell("Equipamento") ||
-               colon("Descri[çc][ãa]o") || colon("Equipamento");
+  const numCA       = spanById("lblNRRegistroCA") || caQuery;
+  const situacao    = spanById("lblSituacao") || "";             // ex: "VENCIDO", "Ativo"
+  const validadeRaw = spanById("lblDTValidade") || "";           // ex: "15/12/2015 00:00:00"
+  const fabricante  = spanById("lblNORazaoSocial") || listFabricante || "";
+  const equipamento = spanById("lblNOEquipamento") || "";        // ex: "CALÇADO TIPO SAPATO"
+  const descricao   = spanById("lblEquipamentoDSEquipamentoTexto") || "";
+  const natureza    = spanById("lblNatureza") || "";             // Nacional / Importado
 
-  const fabricante = spanById("lblFabricante") ||
-                     spanById("lblEmpresa") ||
-                     spanById("lblNomeLaboratorio") ||
-                     cell("Fabricante") || cell("Empresa") ||
-                     colon("Fabricante") || listFabricante || "";
-
-  const validade = spanById("lblValidade") ||
-                   spanById("lblValidadeCa") ||
-                   cell("Validade") || colon("Validade") ||
-                   (html.match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1] || "";
-
-  const situacao = spanById("lblSituacao") ||
-                   spanById("lblSituacaoCa") ||
-                   cell("Situa[çc][ãa]o") || colon("Situa[çc][ãa]o") || "";
-
-  const natureza = spanById("lblNatureza") ||
-                   spanById("lblTipoProtecao") ||
-                   cell("Natureza") || cell("Tipo de Prote[çc][ãa]o") ||
-                   colon("Natureza") || "";
-
-  const numCA = spanById("lblNrCA") ||
-                cell("N[ºo\\.] do CA") || cell("N[ºo\\.] CA") ||
-                colon("N[ºo\\.] CA") || caQuery;
-
-  if (!nome && !fabricante) return null;
+  if (!numCA && !fabricante && !equipamento) return null;
 
   return {
     ca:         (numCA + "").replace(/\D/g, "") || caQuery,
-    nome:       toTitleCase(nome),
+    nome:       toTitleCase(equipamento),
     fabricante: toTitleCase(fabricante),
-    validadeCa: parseDateBR(validade),
+    validadeCa: parseDateBR(validadeRaw),
     situacao:   situacao || "Ativo",
-    ativo:      !situacao || /ativo|v[áa]lido/i.test(situacao),
-    tipo:       mapTipo(natureza || nome),
-    descricao:  toTitleCase(nome),
+    ativo:      !/vencido|cancelado|suspenso/i.test(situacao),
+    tipo:       mapTipo(equipamento),
+    descricao:  toTitleCase(descricao),
     natureza:   toTitleCase(natureza),
   };
 }
