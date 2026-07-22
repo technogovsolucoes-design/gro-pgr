@@ -2,8 +2,7 @@
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
   "functions": {
     "api/consulta-ca.js": {
-      "regions": ["gru1"],
-      "maxDuration": 20
+      "maxDuration": 30
     }
   }
 }
