@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   HardHat, Package, Users, Plus, Trash2, Edit2, CheckCircle,
   AlertTriangle, Fingerprint, X, ShieldCheck, ClipboardList,
+  Search, Loader2,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { Btn, Card, Input } from "../components/ui";
@@ -92,6 +93,8 @@ export default function GestaoEPI({ defaultTab = 0 }) {
   const [epiModal, setEpiModal]   = useState(false);
   const [epiForm, setEpiForm]     = useState(VAZIO_EPI);
   const [epiSaving, setEpiSaving] = useState(false);
+  const [caLoading, setCaLoading] = useState(false);
+  const [caInfo, setCaInfo]       = useState(null); // { situacao, ativo, natureza } após busca
 
   // Funcionário modal
   const [funcModal, setFuncModal]   = useState(false);
@@ -122,6 +125,7 @@ export default function GestaoEPI({ defaultTab = 0 }) {
   // ── Handlers EPI ──
   function abrirEpiModal(epi = null) {
     setEpiForm(epi ? { ...epi } : { ...VAZIO_EPI });
+    setCaInfo(null);
     setEpiModal(true);
   }
   async function salvarEpiForm() {
@@ -130,6 +134,34 @@ export default function GestaoEPI({ defaultTab = 0 }) {
     await salvarEpi(epiForm);
     setEpiSaving(false);
     setEpiModal(false);
+  }
+  async function buscarCA() {
+    const ca = epiForm.ca?.replace(/\D/g, "");
+    if (!ca) return;
+    setCaLoading(true);
+    setCaInfo(null);
+    try {
+      const resp = await fetch(`/api/consulta-ca?ca=${ca}`);
+      const data = await resp.json();
+      if (!resp.ok) {
+        setCaInfo({ erro: data.erro || "CA não encontrado." });
+        return;
+      }
+      // Preenche o formulário com os dados do MTE
+      setEpiForm(p => ({
+        ...p,
+        nome:       data.nome       || p.nome,
+        fabricante: data.fabricante || p.fabricante,
+        validadeCa: data.validadeCa || p.validadeCa,
+        tipo:       data.tipo       || p.tipo,
+        descricao:  data.descricao  || p.descricao,
+      }));
+      setCaInfo({ situacao: data.situacao, ativo: data.ativo, natureza: data.natureza });
+    } catch {
+      setCaInfo({ erro: "Falha ao conectar. Verifique sua conexão." });
+    } finally {
+      setCaLoading(false);
+    }
   }
 
   // ── Handlers Funcionário ──
@@ -449,7 +481,51 @@ export default function GestaoEPI({ defaultTab = 0 }) {
       {/* ── Modal EPI ── */}
       {epiModal && (
         <Modal title={epiForm.id ? "Editar EPI" : "Novo EPI"} onClose={() => setEpiModal(false)}>
-          <Input label="Nome do EPI" value={epiForm.nome} onChange={v => setEF("nome", v)} required placeholder="Ex.: Capacete de Segurança"/>
+
+          {/* ── Nº CA com botão de busca MTE ── */}
+          <div style={{ marginBottom:12 }}>
+            <p style={{ fontSize:11, color:C.muted, margin:"0 0 4px", fontWeight:500 }}>
+              Nº CA (Certificado de Aprovação) <span style={{ color:C.red }}>*</span>
+            </p>
+            <div style={{ display:"flex", gap:8 }}>
+              <input
+                value={epiForm.ca}
+                onChange={e => { setEF("ca", e.target.value); setCaInfo(null); }}
+                onKeyDown={e => e.key === "Enter" && buscarCA()}
+                placeholder="Ex.: 12345"
+                style={{ flex:1, padding:"8px 10px", borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, fontFamily:"inherit" }}
+              />
+              <button
+                onClick={buscarCA}
+                disabled={caLoading || !epiForm.ca}
+                title="Buscar dados na base MTE (CAEPI)"
+                style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:6, border:`1px solid ${C.navyMid}`, background:"#eff6ff", color:C.navyMid, cursor: caLoading || !epiForm.ca ? "not-allowed" : "pointer", fontWeight:600, fontSize:12, fontFamily:"inherit", whiteSpace:"nowrap", opacity: !epiForm.ca ? 0.5 : 1 }}
+              >
+                {caLoading ? <Loader2 size={13} style={{ animation:"spin 1s linear infinite" }}/> : <Search size={13}/>}
+                {caLoading ? "Buscando…" : "Buscar MTE"}
+              </button>
+            </div>
+
+            {/* Feedback da busca */}
+            {caInfo?.erro && (
+              <div style={{ marginTop:6, padding:"7px 10px", borderRadius:6, background:"#fef2f2", border:"1px solid #fca5a5", fontSize:11, color:C.red }}>
+                {caInfo.erro}
+              </div>
+            )}
+            {caInfo && !caInfo.erro && (
+              <div style={{ marginTop:6, padding:"7px 10px", borderRadius:6, background: caInfo.ativo ? "#f0fdf4" : "#fef3c7", border:`1px solid ${caInfo.ativo ? "#86efac" : "#fde047"}`, fontSize:11, color: caInfo.ativo ? "#15803d" : "#92400e", display:"flex", gap:8, alignItems:"center" }}>
+                <CheckCircle size={13}/>
+                <span>
+                  <strong>CA encontrado na base MTE.</strong>
+                  {caInfo.natureza ? ` Natureza: ${caInfo.natureza}.` : ""}
+                  {" "}Situação: <strong>{caInfo.situacao || "—"}</strong>
+                  {!caInfo.ativo && " — atenção: CA pode estar inativo ou vencido."}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <Input label="Nome do EPI" value={epiForm.nome} onChange={v => setEF("nome", v)} required placeholder="Preenchido automaticamente ao buscar CA"/>
           <div style={{ marginBottom:12 }}>
             <p style={{ fontSize:11, color:C.muted, margin:"0 0 4px", fontWeight:500 }}>Tipo <span style={{ color:C.red }}>*</span></p>
             <select value={epiForm.tipo} onChange={e => setEF("tipo", e.target.value)} style={{ width:"100%", padding:"8px 10px", borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, fontFamily:"inherit" }}>
@@ -457,8 +533,7 @@ export default function GestaoEPI({ defaultTab = 0 }) {
               {EPI_TIPOS.map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
-          <Input label="Nº CA (Certificado de Aprovação)" value={epiForm.ca} onChange={v => setEF("ca", v)} required placeholder="Ex.: 12345"/>
-          <Input label="Fabricante" value={epiForm.fabricante} onChange={v => setEF("fabricante", v)} placeholder="Ex.: 3M"/>
+          <Input label="Fabricante" value={epiForm.fabricante} onChange={v => setEF("fabricante", v)} placeholder="Preenchido automaticamente ao buscar CA"/>
           <Input label="Validade do CA" value={epiForm.validadeCa} onChange={v => setEF("validadeCa", v)} type="date"/>
           <Input label="Descrição" value={epiForm.descricao} onChange={v => setEF("descricao", v)} placeholder="Opcional"/>
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:8 }}>
