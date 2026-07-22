@@ -35,6 +35,8 @@ export default async function handler(request) {
       },
     });
 
+  const debug = searchParams.get("debug") === "1";
+
   if (request.method === "OPTIONS") return new Response(null, { status: 200 });
   if (!ca) return json({ erro: "Informe o número do CA." }, 400);
 
@@ -114,6 +116,14 @@ export default async function handler(request) {
       resultHtml.includes("Just a moment")
     ) {
       return json({ erro: "Site MTE inacessível via servidor.", link: CA_URL }, 502);
+    }
+
+    // Modo debug: retorna o HTML bruto para diagnóstico
+    if (debug) {
+      return new Response(resultHtml, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" },
+      });
     }
 
     const result = parseResult(resultHtml, ca);
