@@ -2,8 +2,12 @@
  * Vercel serverless — consulta CA na base do MTE (CAEPI)
  * GET /api/consulta-ca?ca=12345
  *
- * Proxy necessário para contornar CORS do site governo.
+ * Roda preferencialmente na região gru1 (São Paulo) para não ser bloqueado
+ * por firewall geográfico do site de governo.
  */
+
+export const config = { regions: ["gru1"] };
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -12,137 +16,206 @@ export default async function handler(req, res) {
   if (!ca) return res.status(400).json({ erro: "Informe o número do CA." });
 
   const BASE = "https://caepi.trabalho.gov.br/internet/consultacainternet.aspx";
-  const UA   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (compatible; NEXUS-SST/1.0)";
+
+  // Headers que imitam um navegador real — WAFs gov bloqueiam User-Agent suspeito
+  const HEADERS_BROWSER = {
+    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control":   "no-cache",
+    "Pragma":          "no-cache",
+  };
+
+  const debug = req.query.debug === "1";
 
   try {
-    // ── 1. GET para capturar ViewState e cookies de sessão ──────────────────
-    const initResp = await fetch(BASE, {
-      headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml" },
-      redirect: "follow",
-    });
-
-    if (!initResp.ok) {
-      return res.status(502).json({ erro: "Site MTE indisponível. Tente novamente." });
+    // ── 1. GET para capturar ViewState e cookies ──────────────────────────
+    let initResp;
+    try {
+      initResp = await fetch(BASE, {
+        headers: HEADERS_BROWSER,
+        redirect: "follow",
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (fetchErr) {
+      return res.status(502).json({
+        erro: `Falha de rede ao acessar MTE: ${fetchErr.message}. O site pode estar indisponível ou bloquear requisições externas.`,
+      });
     }
 
+    // Lê o HTML independente do status (redirecionamentos gov podem retornar 302→200 etc.)
     const initHtml = await initResp.text();
-    const rawCookies = initResp.headers.raw?.()?.["set-cookie"] || [];
-    const cookie = Array.isArray(rawCookies)
-      ? rawCookies.map(c => c.split(";")[0]).join("; ")
-      : (initResp.headers.get("set-cookie") || "").split(";")[0];
 
-    const vsMatch   = initHtml.match(/id="__VIEWSTATE"\s+value="([^"]*)"/);
-    const vsgMatch  = initHtml.match(/id="__VIEWSTATEGENERATOR"\s+value="([^"]*)"/);
-    const evMatch   = initHtml.match(/id="__EVENTVALIDATION"\s+value="([^"]*)"/);
+    if (debug) {
+      return res.json({
+        _debug: true,
+        status: initResp.status,
+        url:    initResp.url,
+        htmlLength: initHtml.length,
+        htmlSnippet: initHtml.slice(0, 800),
+        hasViewState: initHtml.includes("__VIEWSTATE"),
+      });
+    }
 
-    // campo CA — tenta detectar o name real no HTML
-    const caFieldMatch = initHtml.match(/id="(ctl00[^"]*txtNumeroCa)"/) ||
-                         initHtml.match(/name="(ctl00[^"]*txtNumeroCa)"/);
-    const btnFieldMatch = initHtml.match(/id="(ctl00[^"]*btnPesquisar)"/) ||
-                          initHtml.match(/name="(ctl00[^"]*btnPesquisar)"/);
+    // Diagnóstico: se o site retornar um status inesperado ou HTML sem ViewState
+    if (initResp.status >= 500) {
+      return res.status(502).json({
+        erro: `Site MTE retornou erro HTTP ${initResp.status}. Tente mais tarde.`,
+      });
+    }
 
-    const caField  = caFieldMatch  ? caFieldMatch[1].replace(/_/g, "$").replace(/\$+/g, "$") : "ctl00$conteudo$txtNumeroCa";
-    const btnField = btnFieldMatch ? btnFieldMatch[1].replace(/_/g, "$").replace(/\$+/g, "$") : "ctl00$conteudo$btnPesquisar";
+    // Extrai cookies da sessão — Node 18+ usa getSetCookie(), fallback para headers
+    let cookieStr = "";
+    try {
+      const arr = typeof initResp.headers.getSetCookie === "function"
+        ? initResp.headers.getSetCookie()
+        : [];
+      cookieStr = arr.length
+        ? arr.map(c => c.split(";")[0]).join("; ")
+        : (initResp.headers.get("set-cookie") || "").split(",")
+            .map(c => c.split(";")[0].trim())
+            .filter(Boolean)
+            .join("; ");
+    } catch { /* sem cookies — continua mesmo assim */ }
 
-    // ── 2. POST com o número CA ─────────────────────────────────────────────
+    // Extrai campos ocultos do ASP.NET WebForms
+    const vs   = (initHtml.match(/id="__VIEWSTATE"\s+value="([^"]*)"/)  || [])[1] ?? "";
+    const vsg  = (initHtml.match(/id="__VIEWSTATEGENERATOR"\s+value="([^"]*)"/) || [])[1] ?? "";
+    const ev   = (initHtml.match(/id="__EVENTVALIDATION"\s+value="([^"]*)"/)    || [])[1] ?? "";
+
+    // Se não encontrou ViewState, o HTML retornado não é a página correta
+    if (!vs) {
+      // Tenta encontrar mensagem de erro no HTML
+      const msgErr = (initHtml.match(/<[^>]*(?:error|erro|indisponivel)[^>]*>([^<]+)</i) || [])[1];
+      return res.status(502).json({
+        erro: msgErr
+          ? `Site MTE: ${msgErr.trim()}`
+          : `Não foi possível ler o formulário do site MTE (status ${initResp.status}). O site pode ter mudado ou estar bloqueando requisições externas.`,
+      });
+    }
+
+    // Detecta os nomes dos campos dinamicamente no HTML
+    const caField  = detectField(initHtml, "txtNumeroCa")  || "ctl00$conteudo$txtNumeroCa";
+    const btnField = detectField(initHtml, "btnPesquisar") || "ctl00$conteudo$btnPesquisar";
+
+    // ── 2. POST com o número CA ───────────────────────────────────────────
     const body = new URLSearchParams({
-      "__EVENTTARGET":        "",
-      "__EVENTARGUMENT":      "",
-      "__VIEWSTATE":          vsMatch?.[1]  ?? "",
-      "__VIEWSTATEGENERATOR": vsgMatch?.[1] ?? "",
-      "__EVENTVALIDATION":    evMatch?.[1]  ?? "",
-      [caField]:  ca,
-      [btnField]: "Pesquisar",
+      __EVENTTARGET:        "",
+      __EVENTARGUMENT:      "",
+      __VIEWSTATE:          vs,
+      __VIEWSTATEGENERATOR: vsg,
+      __EVENTVALIDATION:    ev,
+      [caField]:            ca,
+      [btnField]:           "Pesquisar",
     });
 
-    const searchResp = await fetch(BASE, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent":   UA,
-        "Referer":      BASE,
-        "Cookie":       cookie,
-        "Accept":       "text/html,application/xhtml+xml",
-      },
-      body: body.toString(),
-      redirect: "follow",
-    });
+    let searchResp;
+    try {
+      searchResp = await fetch(BASE, {
+        method:  "POST",
+        headers: {
+          ...HEADERS_BROWSER,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Referer":      BASE,
+          ...(cookieStr ? { Cookie: cookieStr } : {}),
+        },
+        body:    body.toString(),
+        redirect: "follow",
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (fetchErr) {
+      return res.status(502).json({
+        erro: `Falha na pesquisa MTE: ${fetchErr.message}.`,
+      });
+    }
 
     const html = await searchResp.text();
 
-    // ── 3. Parse do resultado ──────────────────────────────────────────────
+    // ── 3. Parse do resultado ─────────────────────────────────────────────
     const dados = parseCa(html, ca);
 
     if (!dados) {
+      // Verifica se a página retornou mensagem de "não encontrado"
+      const semResult = /nenhum|n[ãa]o.*encontrad|sem.*resultado/i.test(html);
       return res.status(404).json({
-        erro: `CA ${ca} não encontrado na base MTE (CAEPI). Verifique o número e tente novamente.`,
+        erro: semResult
+          ? `CA ${ca} não encontrado na base MTE (CAEPI).`
+          : `CA ${ca} não encontrado. Verifique se o número está correto.`,
       });
     }
 
     return res.status(200).json(dados);
   } catch (err) {
     return res.status(502).json({
-      erro: "Não foi possível conectar à base MTE. " + err.message,
+      erro: "Erro inesperado: " + err.message,
     });
   }
 }
 
-// ── Extrai dados da tabela de resultados do CAEPI ───────────────────────────
+// Detecta o name do campo ASP.NET pelo id parcial
+function detectField(html, partial) {
+  const m = html.match(new RegExp(`name="(ctl00[^"]*${partial}[^"]*)"`, "i"))
+         || html.match(new RegExp(`id="(ctl00[^"]*${partial}[^"]*)"`, "i"));
+  if (!m) return null;
+  // Converte id_ para name$ (ASP.NET converte _ em $ no name)
+  return m[1].replace(/_{1}/g, "$");
+}
+
+// ── Parser da tabela de resultados ──────────────────────────────────────────
 function parseCa(html, ca) {
-  // Remove tags internas para facilitar leitura de células
   const celula = (td) =>
     td.replace(/<[^>]+>/g, " ")
       .replace(/&nbsp;/g, " ")
       .replace(/&amp;/g, "&")
+      .replace(/&#\d+;/g, " ")
       .replace(/\s+/g, " ")
       .trim();
 
-  // Tenta encontrar rows da GridView (classes típicas do CAEPI)
-  const rowPattern = /<tr[^>]*class="(Grid(?:Row|AltRow)|gridRow|listagem)[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi;
-  const rows = [...html.matchAll(rowPattern)];
+  // Estratégia 1: linhas com classe Grid* (ASP.NET GridView padrão)
+  const byClass = [...html.matchAll(
+    /<tr[^>]*class="(Grid(?:Row|AltRow)|gridRow)[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi
+  )];
 
-  // Fallback: qualquer <tr> que contenha o número CA como primeiro <td>
-  if (rows.length === 0) {
-    const allRows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-    for (const row of allRows) {
-      const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => celula(m[1]));
-      if (cells.length >= 5 && cells[0].replace(/\D/g, "") === ca) {
-        return montarDto(cells, ca);
+  if (byClass.length > 0) {
+    for (const row of byClass) {
+      const cells = [...row[2].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)]
+        .map(m => celula(m[1]));
+      if (cells.length >= 5) {
+        const dto = montarDto(cells, ca);
+        if (dto) return dto;
       }
     }
-    return null;
   }
 
-  for (const row of rows) {
-    const cells = [...row[2].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => celula(m[1]));
-    if (cells.length < 5) continue;
-    const dto = montarDto(cells, ca);
-    if (dto) return dto;
+  // Estratégia 2: qualquer <tr> cujo primeiro <td> seja o número CA
+  const allRows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+  for (const row of allRows) {
+    const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)]
+      .map(m => celula(m[1]));
+    if (cells.length >= 5 && cells[0].replace(/\D/g, "") === ca) {
+      return montarDto(cells, ca);
+    }
   }
+
   return null;
 }
 
-// Colunas padrão CAEPI: [Nº CA][Nome EPI][Empresa][CNPJ][Validade][Situação][Natureza/Tipo]
+// Colunas esperadas: [Nº CA][Nome EPI][Empresa][CNPJ][Validade][Situação][Natureza/Tipo]
 function montarDto(cells, caQuery) {
-  const numCA    = cells[0]?.replace(/\D/g, "") || caQuery;
   const nome     = cells[1] || "";
-  const empresa  = cells[2] || "";
-  const validade = cells[4] || "";
-  const situacao = cells[5] || "";
-  const natureza = cells[6] || cells[cells.length - 1] || "";
-
   if (!nome) return null;
 
   return {
-    ca:          numCA,
-    nome:        toTitleCase(nome),
-    fabricante:  toTitleCase(empresa),
-    validadeCa:  parseDateBR(validade),
-    situacao:    situacao,
-    ativo:       /ativo|válido|valido/i.test(situacao),
-    tipo:        mapTipo(natureza),
-    descricao:   toTitleCase(nome),
-    natureza:    toTitleCase(natureza),
+    ca:         cells[0]?.replace(/\D/g, "") || caQuery,
+    nome:       toTitleCase(nome),
+    fabricante: toTitleCase(cells[2] || ""),
+    validadeCa: parseDateBR(cells[4] || ""),
+    situacao:   (cells[5] || "").trim(),
+    ativo:      /ativo|válido|valido/i.test(cells[5] || ""),
+    tipo:       mapTipo(cells[6] || cells[cells.length - 1] || ""),
+    descricao:  toTitleCase(nome),
+    natureza:   toTitleCase(cells[6] || cells[cells.length - 1] || ""),
   };
 }
 
@@ -155,21 +228,19 @@ function toTitleCase(str) {
 
 function parseDateBR(str) {
   const m = str.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-  if (!m) return "";
-  return `${m[3]}-${m[2]}-${m[1]}`;
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
 }
 
-// Mapeia "natureza" do MTE → EPI_TIPOS do sistema
 function mapTipo(natureza) {
   const n = natureza.toLowerCase();
-  if (/cabe[cç]a|capac|elmo/.test(n))                      return "Proteção da Cabeça";
-  if (/olho|face|facial|viseira|[oó]culo/.test(n))         return "Proteção dos Olhos e Face";
-  if (/audit|ouvido|ru[ií]do|abafador|protetor auricular/.test(n)) return "Proteção Auditiva";
-  if (/respir|pulm[ão]o|filtro|m[áa]sc[áa]ra|peca facial/.test(n)) return "Proteção Respiratória";
-  if (/superior|m[ãa]o|luva|bra[cç]o|manga/.test(n))      return "Proteção dos Membros Superiores";
+  if (/cabe[cç]a|capac|elmo/.test(n))                               return "Proteção da Cabeça";
+  if (/olho|face|facial|viseira|[oó]culo/.test(n))                  return "Proteção dos Olhos e Face";
+  if (/audit|ouvido|ru[ií]do|abafador|protetor auricular/.test(n))  return "Proteção Auditiva";
+  if (/respir|pulm[ãa]o|filtro|m[áa]sc[áa]ra|pe[çc]a facial/.test(n)) return "Proteção Respiratória";
+  if (/superior|m[ãa]o|luva|bra[cç]o|manga/.test(n))               return "Proteção dos Membros Superiores";
   if (/inferior|p[eé]|cal[cç]ado|bota|sapato|perna|botina/.test(n)) return "Proteção dos Membros Inferiores";
-  if (/tronco|torso|colete|vest|avental|jaleco/.test(n))   return "Proteção do Tronco";
-  if (/corpo.*inteiro|macacão|m?acac/.test(n))             return "Proteção do Corpo Inteiro";
-  if (/queda|altura|talabarte|cintur[ãa]o|cord/.test(n))   return "Proteção contra Quedas";
+  if (/tronco|torso|colete|vest|avental|jaleco/.test(n))            return "Proteção do Tronco";
+  if (/corpo.*inteiro|maca[cç][ãa]o/.test(n))                      return "Proteção do Corpo Inteiro";
+  if (/queda|altura|talabarte|cintur[ãa]o/.test(n))                 return "Proteção contra Quedas";
   return "Outro";
 }
