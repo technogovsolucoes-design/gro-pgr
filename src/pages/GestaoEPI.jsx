@@ -144,10 +144,10 @@ export default function GestaoEPI({ defaultTab = 0 }) {
       const resp = await fetch(`/api/consulta-ca?ca=${ca}`);
       const data = await resp.json();
       if (!resp.ok) {
-        setCaInfo({ erro: data.erro || "CA não encontrado." });
+        setCaInfo({ erro: data.erro || "CA não encontrado.", link: data.link });
         return;
       }
-      // Preenche o formulário com os dados do MTE
+      // Preenche o formulário com os dados da base MTE
       setEpiForm(p => ({
         ...p,
         nome:       data.nome       || p.nome,
@@ -158,7 +158,10 @@ export default function GestaoEPI({ defaultTab = 0 }) {
       }));
       setCaInfo({ situacao: data.situacao, ativo: data.ativo, natureza: data.natureza });
     } catch {
-      setCaInfo({ erro: "Falha ao conectar. Verifique sua conexão." });
+      setCaInfo({
+        erro: "Falha ao consultar. Preencha manualmente ou consulte o site.",
+        link: "https://caepi.trabalho.gov.br/internet/consultacainternet.aspx",
+      });
     } finally {
       setCaLoading(false);
     }
@@ -508,8 +511,11 @@ export default function GestaoEPI({ defaultTab = 0 }) {
 
             {/* Feedback da busca */}
             {caInfo?.erro && (
-              <div style={{ marginTop:6, padding:"7px 10px", borderRadius:6, background:"#fef2f2", border:"1px solid #fca5a5", fontSize:11, color:C.red }}>
+              <div style={{ marginTop:6, padding:"8px 10px", borderRadius:6, background:"#fef2f2", border:"1px solid #fca5a5", fontSize:11, color:C.red }}>
                 {caInfo.erro}
+                {caInfo.link && (
+                  <span> <a href={caInfo.link} target="_blank" rel="noreferrer" style={{ color:C.red, fontWeight:600 }}>Consultar no site MTE →</a></span>
+                )}
               </div>
             )}
             {caInfo && !caInfo.erro && (
