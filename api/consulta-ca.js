@@ -79,6 +79,7 @@ export default async function handler(request) {
       "ctl00$PlaceHolderConteudo$cboEquipamento":  selEquip,
       "ctl00$PlaceHolderConteudo$cboFabricante":   selFabric,
       "ctl00$PlaceHolderConteudo$cboTipoProtecao": selTipo,
+      "ctl00$PlaceHolderConteudo$btnConsultar":    "Consultar",
     });
 
     const postResp = await fetch(CA_URL, {
