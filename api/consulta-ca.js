@@ -2,8 +2,8 @@
  * Vercel Edge Function — consulta CA no site oficial do MTE (CAEPI)
  * GET /api/consulta-ca?ca=12345
  *
- * Edge Functions rodam na infraestrutura Cloudflare (Vercel Edge Network),
- * o que permite acessar sites protegidos pelo Cloudflare sem o desafio JS.
+ * Edge Functions rodam na infraestrutura Cloudflare (Vercel Edge Network).
+ * O formulário usa ASP.NET UpdatePanel — exige async postback (Delta format).
  */
 
 export const config = { runtime: "edge" };
@@ -14,18 +14,20 @@ const CA_URL =
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
+// IDs extraídos do JavaScript do ScriptManager na página CAEPI
+const SM_NAME       = "ctl00$ScriptManager1";           // UniqueID do ScriptManager
+const PANEL_UNAME   = "ctl00$PlaceHolderConteudo$panel"; // UniqueID do UpdatePanel
+const BTN_UNAME     = "ctl00$PlaceHolderConteudo$btnConsultar"; // Trigger
+
 export default async function handler(request) {
   const { searchParams } = new URL(request.url);
-  const ca = (searchParams.get("ca") || "").replace(/\D/g, "");
+  const ca    = (searchParams.get("ca") || "").replace(/\D/g, "");
   const debug = searchParams.get("debug") === "1";
 
   const json = (data, status = 200) =>
     new Response(JSON.stringify(data), {
       status,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
 
   if (request.method === "OPTIONS") return new Response(null, { status: 200 });
@@ -35,21 +37,20 @@ export default async function handler(request) {
     // ── 1. GET — obtém ViewState, EventValidation e cookies da sessão ──────
     const getResp = await fetch(CA_URL, {
       headers: {
-        "User-Agent": BROWSER_UA,
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "User-Agent":      BROWSER_UA,
+        Accept:            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "pt-BR,pt;q=0.9",
-        "Cache-Control": "no-cache",
+        "Cache-Control":   "no-cache",
       },
       redirect: "follow",
     });
 
     const html = await getResp.text();
 
-    if (isCloudflareChallenge(html)) {
+    if (isChallenge(html)) {
       return json({ erro: "Site MTE temporariamente inacessível.", link: CA_URL }, 502);
     }
 
-    // Extrai campos hidden do WebForms
     const vs  = field(html, "__VIEWSTATE");
     const vsg = field(html, "__VIEWSTATEGENERATOR");
     const ev  = field(html, "__EVENTVALIDATION");
@@ -58,57 +59,63 @@ export default async function handler(request) {
       return json({ erro: "Página CAEPI fora do formato esperado.", link: CA_URL }, 502);
     }
 
-    // Extrai os cookies de sessão do GET (inclui ASP.NET_SessionId)
-    const cookieHeader = collectCookies(getResp.headers);
+    const cookies    = collectCookies(getResp.headers);
+    const selEquip   = firstOption(html, "cboEquipamento");
+    const selFabric  = firstOption(html, "cboFabricante");
+    const selTipo    = firstOption(html, "cboTipoProtecao");
 
-    // Extrai o primeiro valor válido de cada dropdown (valor "Selecione")
-    const selEquip  = firstOptionValue(html, "cboEquipamento");
-    const selFabric = firstOptionValue(html, "cboFabricante");
-    const selTipo   = firstOptionValue(html, "cboTipoProtecao");
-
-    // ── 2. POST — submete o formulário de busca ────────────────────────────
+    // ── 2. POST assíncrono (UpdatePanel Delta format) ──────────────────────
+    // O ScriptManager exige que o POST seja async (X-MicrosoftAjax: Delta=true)
+    // e o body inclua o campo SM_NAME apontando para o painel e o trigger.
     const body = new URLSearchParams({
-      __EVENTTARGET:    "",
-      __EVENTARGUMENT:  "",
-      __VIEWSTATE:      vs,
-      __VIEWSTATEGENERATOR: vsg,
-      __EVENTVALIDATION: ev,
+      [SM_NAME]:                      `${PANEL_UNAME}|${BTN_UNAME}`,
+      __EVENTTARGET:                  "",
+      __EVENTARGUMENT:                "",
+      __ASYNCPOST:                    "true",
+      __VIEWSTATE:                    vs,
+      __VIEWSTATEGENERATOR:           vsg,
+      __EVENTVALIDATION:              ev,
       "ctl00$PlaceHolderConteudo$txtNumeroCA":    ca,
       "ctl00$PlaceHolderConteudo$cboEquipamento":  selEquip,
       "ctl00$PlaceHolderConteudo$cboFabricante":   selFabric,
       "ctl00$PlaceHolderConteudo$cboTipoProtecao": selTipo,
-      "ctl00$PlaceHolderConteudo$btnConsultar":    "Consultar",
     });
 
     const postResp = await fetch(CA_URL, {
       method: "POST",
       headers: {
-        "User-Agent": BROWSER_UA,
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "pt-BR,pt;q=0.9",
-        "Content-Type": "application/x-www-form-urlencoded",
-        Referer: CA_URL,
-        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        "User-Agent":        BROWSER_UA,
+        Accept:              "*/*",
+        "Accept-Language":   "pt-BR,pt;q=0.9",
+        "Content-Type":      "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-MicrosoftAjax":  "Delta=true",
+        "X-Requested-With": "XMLHttpRequest",
+        Referer:             CA_URL,
+        ...(cookies ? { Cookie: cookies } : {}),
       },
       body: body.toString(),
       redirect: "follow",
     });
 
-    const resultHtml = await postResp.text();
+    const raw = await postResp.text();
 
     if (debug) {
       return new Response(
-        `<!-- GET selEquip=${selEquip} selFabric=${selFabric} selTipo=${selTipo} cookies="${cookieHeader}" -->\n` +
-        resultHtml,
-        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Access-Control-Allow-Origin": "*" } }
+        `<!-- selEquip="${selEquip}" selFabric="${selFabric}" selTipo="${selTipo}" -->\n` +
+        `<!-- cookies: ${cookies} -->\n` +
+        raw,
+        { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8", "Access-Control-Allow-Origin": "*" } }
       );
     }
 
-    if (isCloudflareChallenge(resultHtml)) {
+    if (isChallenge(raw)) {
       return json({ erro: "Site MTE inacessível via servidor.", link: CA_URL }, 502);
     }
 
-    const result = parseResult(resultHtml, ca);
+    // Extrai o HTML do UpdatePanel da resposta Delta
+    const panelHtml = parseDelta(raw) || raw;
+
+    const result = parseResult(panelHtml, ca);
 
     if (!result) {
       return json(
@@ -118,13 +125,50 @@ export default async function handler(request) {
     }
 
     return json(result);
+
   } catch (err) {
     return json({ erro: "Erro ao consultar CAEPI: " + err.message, link: CA_URL }, 502);
   }
 }
 
+// ── Parse do formato Delta do ASP.NET UpdatePanel ────────────────────────────
+// Formato: length|type|id|content|length|type|id|content|...
+function parseDelta(text) {
+  let pos = 0;
+  let panelHtml = "";
+
+  while (pos < text.length) {
+    const p1 = text.indexOf("|", pos);
+    if (p1 === -1) break;
+    const lenStr = text.substring(pos, p1);
+    const len = parseInt(lenStr, 10);
+    pos = p1 + 1;
+
+    const p2 = text.indexOf("|", pos);
+    if (p2 === -1) break;
+    const type = text.substring(pos, p2);
+    pos = p2 + 1;
+
+    const p3 = text.indexOf("|", pos);
+    if (p3 === -1) break;
+    const id = text.substring(pos, p3);
+    pos = p3 + 1;
+
+    // Conteúdo tem exatamente `len` caracteres
+    const content = isNaN(len) ? "" : text.substring(pos, pos + len);
+    pos += isNaN(len) ? 0 : len;
+    if (text[pos] === "|") pos++;
+
+    if (type === "updatePanel") {
+      panelHtml += content;
+    }
+  }
+
+  return panelHtml || null;
+}
+
 // ── Detecta Cloudflare challenge ─────────────────────────────────────────────
-function isCloudflareChallenge(html) {
+function isChallenge(html) {
   return (
     html.includes("Enable JavaScript") ||
     html.includes("cf-browser-verification") ||
@@ -132,17 +176,17 @@ function isCloudflareChallenge(html) {
   );
 }
 
-// ── Extrai valor de campo hidden por nome ────────────────────────────────────
+// ── Extrai valor de campo hidden ─────────────────────────────────────────────
 function field(html, name) {
-  const m = html.match(new RegExp(`name="${name}"[^>]+value="([^"]*)"`, "i")) ||
-            html.match(new RegExp(`id="${name}"[^>]+value="([^"]*)"`, "i"));
+  const m =
+    html.match(new RegExp(`name="${name}"[^>]+value="([^"]*)"`, "i")) ||
+    html.match(new RegExp(`id="${name}"[^>]+value="([^"]*)"`, "i"));
   return m ? m[1] : "";
 }
 
-// ── Coleta todos os Set-Cookie do response headers ───────────────────────────
+// ── Coleta todos os Set-Cookie headers ───────────────────────────────────────
 function collectCookies(headers) {
   const cookies = [];
-  // Itera todos os headers para pegar múltiplos Set-Cookie
   for (const [k, v] of headers.entries()) {
     if (k.toLowerCase() === "set-cookie") {
       const pair = v.split(";")[0].trim();
@@ -152,20 +196,18 @@ function collectCookies(headers) {
   return cookies.join("; ");
 }
 
-// ── Extrai primeiro valor de option em um select por nome do controle ────────
-function firstOptionValue(html, controlName) {
-  // O id do select é PlaceHolderConteudo_<nome>, name é ctl00$PlaceHolderConteudo$<nome>
+// ── Extrai o valor do primeiro <option> de um select ────────────────────────
+function firstOption(html, ctrlName) {
   const re = new RegExp(
-    `<select[^>]+(?:id|name)="[^"]*${controlName}[^"]*"[^>]*>\\s*<option[^>]*value="([^"]*)"`,
+    `<select[^>]+(?:id|name)="[^"]*${ctrlName}[^"]*"[^>]*>[\\s\\S]*?<option[^>]*value="([^"]*)"`,
     "i"
   );
   const m = html.match(re);
   return m ? m[1] : "";
 }
 
-// ── Faz o parse do HTML de resultado do CAEPI ───────────────────────────────
+// ── Parse do HTML de resultado ───────────────────────────────────────────────
 function parseResult(html, caQuery) {
-  // Sem resultados
   if (
     /nenhum.*(CA|certificado|resultado)/i.test(html) ||
     /CA.*n[ãa]o.*encontrado/i.test(html)
@@ -173,46 +215,45 @@ function parseResult(html, caQuery) {
     return null;
   }
 
-  // Estratégia: extrai células de tabelas <td> após cabeçalhos conhecidos
-  const afterHeader = (label) => {
+  // Extrai valor de célula td após cabeçalho com label
+  const afterTh = (label) => {
     const re = new RegExp(
-      `${label}[^<]*<\/(?:td|th)>[^<]*<(?:td|th)[^>]*>\\s*([^<]{2,120})`,
+      `${label}[^<]*<\\/(?:td|th)>\\s*<(?:td|th)[^>]*>([^<]{2,200})`,
       "i"
     );
     const m = html.match(re);
     return m ? m[1].replace(/<[^>]+>/g, "").trim() : "";
   };
 
-  // Estratégia alternativa: pares "Label: Valor" em texto corrido
   const afterColon = (label) => {
-    const re = new RegExp(`${label}[^:]*:\\s*([^<\n]{2,120})`, "i");
+    const re = new RegExp(`${label}[^:]*:\\s*([^<\\n]{2,200})`, "i");
     const m = html.match(re);
     return m ? m[1].trim() : "";
   };
 
-  const nome = afterHeader("Descri[çc][ãa]o") ||
-               afterHeader("Equipamento") ||
+  const nome = afterTh("Descri[çc][ãa]o") ||
+               afterTh("Equipamento") ||
                afterColon("Descri[çc][ãa]o do EPI") ||
                afterColon("Equipamento");
 
-  const fabricante = afterHeader("Fabricante") ||
-                     afterHeader("Empresa") ||
+  const fabricante = afterTh("Fabricante") ||
+                     afterTh("Empresa") ||
                      afterColon("Fabricante") ||
                      afterColon("Empresa");
 
-  const validade = afterHeader("Validade") ||
+  const validade = afterTh("Validade") ||
                    afterColon("Validade") ||
                    (html.match(/(\d{2}\/\d{2}\/\d{4})/) || [])[1] || "";
 
-  const situacao = afterHeader("Situa[çc][ãa]o") ||
+  const situacao = afterTh("Situa[çc][ãa]o") ||
                    afterColon("Situa[çc][ãa]o") || "";
 
-  const natureza = afterHeader("Natureza") ||
-                   afterHeader("Tipo de Prote[çc][ãa]o") ||
+  const natureza = afterTh("Natureza") ||
+                   afterTh("Tipo de Prote[çc][ãa]o") ||
                    afterColon("Natureza") || "";
 
-  const numCA = afterHeader("N[ºo\\.] CA") ||
-                afterHeader("N[ºo\\.] do CA") ||
+  const numCA = afterTh("N[ºo\\.] CA") ||
+                afterTh("N[ºo\\.] do CA") ||
                 afterColon("N[ºo\\.] CA") ||
                 caQuery;
 
@@ -249,14 +290,14 @@ function parseDateBR(str) {
 
 function mapTipo(n) {
   n = (n || "").toLowerCase();
-  if (/cabe[cç]a|capac|elmo/.test(n))                                return "Proteção da Cabeça";
-  if (/olho|face|facial|viseira|[oó]culo/.test(n))                   return "Proteção dos Olhos e Face";
-  if (/audit|ouvido|ru[ií]do|abafador|protetor auricular/.test(n))   return "Proteção Auditiva";
+  if (/cabe[cç]a|capac|elmo/.test(n))                                  return "Proteção da Cabeça";
+  if (/olho|face|facial|viseira|[oó]culo/.test(n))                     return "Proteção dos Olhos e Face";
+  if (/audit|ouvido|ru[ií]do|abafador|protetor auricular/.test(n))     return "Proteção Auditiva";
   if (/respir|pulm[ãa]o|filtro|m[áa]sc[áa]ra|pe[çc]a facial/.test(n)) return "Proteção Respiratória";
-  if (/superior|m[ãa]o|luva|bra[cç]o|manga/.test(n))                return "Proteção dos Membros Superiores";
-  if (/inferior|p[eé]|cal[cç]ado|bota|sapato|perna|botina/.test(n)) return "Proteção dos Membros Inferiores";
-  if (/tronco|torso|colete|vest|avental|jaleco/.test(n))             return "Proteção do Tronco";
-  if (/corpo.*inteiro|maca[cç][ãa]o/.test(n))                       return "Proteção do Corpo Inteiro";
-  if (/queda|altura|talabarte|cintur[ãa]o/.test(n))                  return "Proteção contra Quedas";
+  if (/superior|m[ãa]o|luva|bra[cç]o|manga/.test(n))                  return "Proteção dos Membros Superiores";
+  if (/inferior|p[eé]|cal[cç]ado|bota|sapato|perna|botina/.test(n))   return "Proteção dos Membros Inferiores";
+  if (/tronco|torso|colete|vest|avental|jaleco/.test(n))               return "Proteção do Tronco";
+  if (/corpo.*inteiro|maca[cç][ãa]o/.test(n))                         return "Proteção do Corpo Inteiro";
+  if (/queda|altura|talabarte|cintur[ãa]o/.test(n))                    return "Proteção contra Quedas";
   return "Outro";
 }
