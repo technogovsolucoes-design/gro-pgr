@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { buscarCID, descCID } from "../services/cid10";
+import { buscarCID, descCID, isCodCID } from "../services/cid10";
 import { C } from "../constants";
 
 export default function CIDInput({ value = "", onChange, label = "CID-10", required }) {
@@ -46,12 +46,11 @@ export default function CIDInput({ value = "", onChange, label = "CID-10", requi
       return;
     }
 
-    // Se digitou um código que existe exatamente na tabela, seleciona direto
+    // Se está na tabela ou tem formato válido de CID, aceita
     const exato = descCID(puro);
-    if (exato) {
+    if (exato || isCodCID(puro)) {
       onChange(puro);
     } else {
-      // Ainda não é um código válido — limpa value mas mostra sugestões
       onChange("");
     }
 
@@ -84,8 +83,8 @@ export default function CIDInput({ value = "", onChange, label = "CID-10", requi
     setAberto(false);
   }
 
-  // Descrição: prioriza match exato do que está digitado, depois do value salvo
   const descAtual = descCID(query.trim()) || descCID(value);
+  const formatoValido = isCodCID(query.trim());
 
   return (
     <div ref={containerRef} style={{ marginBottom:12 }}>
@@ -105,7 +104,7 @@ export default function CIDInput({ value = "", onChange, label = "CID-10", requi
             width:"100%",
             padding:"8px 10px",
             borderRadius:6,
-            border:`1px solid ${descAtual ? C.green : aberto ? C.navyMid : C.border}`,
+            border:`1px solid ${(descAtual || formatoValido) ? C.green : aberto ? C.navyMid : C.border}`,
             fontSize:12,
             fontFamily:"inherit",
             boxSizing:"border-box",
@@ -118,6 +117,10 @@ export default function CIDInput({ value = "", onChange, label = "CID-10", requi
       {descAtual ? (
         <p style={{ margin:"4px 0 0", fontSize:11, color:C.green, fontWeight:600, lineHeight:1.4 }}>
           ✓ {descAtual}
+        </p>
+      ) : formatoValido && !descAtual ? (
+        <p style={{ margin:"4px 0 0", fontSize:11, color:C.green, fontWeight:600 }}>
+          ✓ Código aceito
         </p>
       ) : query.trim().length >= 2 && itens.length === 0 ? (
         <p style={{ margin:"4px 0 0", fontSize:11, color:C.amber }}>
