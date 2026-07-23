@@ -4,6 +4,8 @@ import { Btn, Card, Input } from "../../components/ui";
 import { C } from "../../constants";
 import { db } from "../../firebase";
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import CIDInput from "../../components/CIDInput";
+import FuncionarioSelect from "../../components/FuncionarioSelect";
 
 function Modal({ title, onClose, children }) {
   return (
@@ -172,7 +174,13 @@ export default function Atestados() {
 
       {modal && (
         <Modal title={form.id ? "Editar Atestado" : "Novo Atestado"} onClose={() => setModal(false)}>
-          <Input label="Nome do Funcionário" value={form.funcionarioNome} onChange={v => sf("funcionarioNome", v)} required/>
+          <FuncionarioSelect
+            label="Funcionário"
+            required
+            value={form.funcionarioNome}
+            allowFree
+            onChange={f => sf("funcionarioNome", f.nome)}
+          />
           <Input label="Data de Apresentação" value={form.dataApresentacao} onChange={v => sf("dataApresentacao", v)} type="date" required/>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Input label="Data de Início" value={form.dataInicio} onChange={v => sf("dataInicio", v)} type="date"/>
@@ -180,7 +188,7 @@ export default function Atestados() {
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Input label="Dias Afastados" value={form.diasAfastados} onChange={v => sf("diasAfastados", v)} type="number" placeholder="0"/>
-            <Input label="CID-10" value={form.cid} onChange={v => sf("cid", v)} placeholder="Ex.: J11.1"/>
+            <CIDInput value={form.cid} onChange={v => sf("cid", v)} />
           </div>
           <Input label="Nome do Médico" value={form.medicoNome} onChange={v => sf("medicoNome", v)}/>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>

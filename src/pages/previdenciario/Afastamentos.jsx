@@ -4,6 +4,8 @@ import { Btn, Card, Input } from "../../components/ui";
 import { C } from "../../constants";
 import { db } from "../../firebase";
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import CIDInput from "../../components/CIDInput";
+import FuncionarioSelect from "../../components/FuncionarioSelect";
 
 function Modal({ title, onClose, children }) {
   return (
@@ -187,10 +189,16 @@ export default function Afastamentos() {
 
       {modal && (
         <Modal title={form.id ? "Editar Afastamento" : "Novo Afastamento"} onClose={() => setModal(false)}>
-          <Input label="Nome do Funcionário" value={form.funcionarioNome} onChange={v => sf("funcionarioNome", v)} required/>
+          <FuncionarioSelect
+            label="Funcionário"
+            required
+            value={form.funcionarioNome}
+            allowFree
+            onChange={f => setForm(p => ({ ...p, funcionarioNome:f.nome, cpf:f.cpf||p.cpf }))}
+          />
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Input label="CPF" value={form.cpf} onChange={v => sf("cpf", v)} placeholder="000.000.000-00"/>
-            <Input label="CID-10" value={form.cid} onChange={v => sf("cid", v)} placeholder="Ex.: M54.5"/>
+            <CIDInput value={form.cid} onChange={v => sf("cid", v)} />
           </div>
           <div style={{ marginBottom:12 }}>
             <p style={{ fontSize:11, color:C.muted, margin:"0 0 4px", fontWeight:500 }}>Tipo de Afastamento <span style={{ color:C.red }}>*</span></p>

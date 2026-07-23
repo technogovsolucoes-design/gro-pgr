@@ -3,6 +3,9 @@
   "functions": {
     "api/consulta-ca.js": {
       "maxDuration": 30
+    },
+    "api/esocial-operacoes.js": {
+      "maxDuration": 30
     }
   }
 }
