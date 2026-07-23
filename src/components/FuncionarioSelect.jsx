@@ -4,21 +4,23 @@ import { C } from "../constants";
 
 /**
  * Seletor de funcionário com autocomplete.
- * Busca na lista de funcionários cadastrados da empresa ativa.
+ * Usa position:fixed no dropdown para não ser cortado por overflow:auto do modal.
  *
  * Props:
  *   value      — nome do funcionário selecionado (string)
  *   onChange   — function({ nome, cpf, matricula, cargo, setorId, id })
  *   label      — string (default "Funcionário")
  *   required   — bool
- *   allowFree  — bool: permite digitar nome livre (sem estar no cadastro)
+ *   allowFree  — bool: permite digitar nome livre sem estar no cadastro
  */
 export default function FuncionarioSelect({ value = "", onChange, label = "Funcionário", required, allowFree }) {
   const { funcionarios = [] } = useApp();
-  const [query, setQuery]     = useState(value);
-  const [itens, setItens]     = useState([]);
-  const [aberto, setAberto]   = useState(false);
-  const ref = useRef();
+  const [query,  setQuery]  = useState(value);
+  const [itens,  setItens]  = useState([]);
+  const [aberto, setAberto] = useState(false);
+  const [pos,    setPos]    = useState({ top:0, left:0, width:200 });
+  const inputRef = useRef();
+  const ref      = useRef();
 
   useEffect(() => { setQuery(value); }, [value]);
 
@@ -29,6 +31,13 @@ export default function FuncionarioSelect({ value = "", onChange, label = "Funci
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
   }, []);
+
+  function calcPos() {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 2, left: r.left, width: r.width });
+    }
+  }
 
   function handleChange(e) {
     const t = e.target.value;
@@ -41,8 +50,15 @@ export default function FuncionarioSelect({ value = "", onChange, label = "Funci
       .filter(f => (f.nome || "").toLowerCase().includes(t.toLowerCase()))
       .slice(0, 8);
     setItens(res);
-    setAberto(res.length > 0);
+    if (res.length > 0) { calcPos(); setAberto(true); } else setAberto(false);
     if (allowFree) onChange({ nome:t, cpf:"", matricula:"", cargo:"", setorId:"", id:"" });
+  }
+
+  function handleFocus() {
+    const res = query.trim()
+      ? funcionarios.filter(f => (f.nome||"").toLowerCase().includes(query.toLowerCase())).slice(0,8)
+      : funcionarios.slice(0, 8);
+    if (res.length > 0) { calcPos(); setItens(res); setAberto(true); }
   }
 
   function selecionar(f) {
@@ -60,14 +76,10 @@ export default function FuncionarioSelect({ value = "", onChange, label = "Funci
         {label}{required && <span style={{ color:C.red }}> *</span>}
       </p>
       <input
+        ref={inputRef}
         value={query}
         onChange={handleChange}
-        onFocus={() => {
-          if (!query) {
-            setItens(funcionarios.slice(0, 8));
-            setAberto(funcionarios.length > 0);
-          } else if (itens.length > 0) setAberto(true);
-        }}
+        onFocus={handleFocus}
         placeholder="Buscar funcionário por nome..."
         autoComplete="off"
         style={{
@@ -77,16 +89,24 @@ export default function FuncionarioSelect({ value = "", onChange, label = "Funci
         }}
       />
       {selecionado && (
-        <span style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-10%)", fontSize:10, color:C.green, fontWeight:700 }}>✓</span>
+        <p style={{ margin:"3px 0 0", fontSize:10, color:C.green, fontWeight:600 }}>✓ Funcionário encontrado no cadastro</p>
       )}
       {funcionarios.length === 0 && (
         <p style={{ fontSize:10, color:C.muted, margin:"2px 0 0" }}>Nenhum funcionário cadastrado. Cadastre em Gestão EPI → Funcionários.</p>
       )}
       {aberto && itens.length > 0 && (
         <div style={{
-          position:"absolute", zIndex:200, top:"100%", left:0, right:0,
-          background:"#fff", border:`1px solid ${C.border}`, borderRadius:8,
-          boxShadow:"0 8px 24px rgba(0,0,0,0.12)", maxHeight:240, overflowY:"auto",
+          position:"fixed",
+          zIndex:9999,
+          top:   pos.top,
+          left:  pos.left,
+          width: pos.width,
+          background:"#fff",
+          border:`1px solid ${C.border}`,
+          borderRadius:8,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.15)",
+          maxHeight:220,
+          overflowY:"auto",
         }}>
           {itens.map(f => (
             <div key={f.id} onMouseDown={() => selecionar(f)}
